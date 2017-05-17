@@ -1,7 +1,7 @@
 # APSyncWeb
 
 ## ---Work in progress--- 
-This project is a work in progress. Please [raise an issue](https://github.com/SamuelDudley/APSyncWeb/issues/new) and include any ideas you might have / features you would like to see implemented
+This project is a work in progress. Please [raise an issue](https://github.com/SamuelDudley/APSyncWeb/issues/new) and include any ideas you might have / features you would like to see implemented. You can also join the chat about the [Ardupilot companion](https://github.com/ArduPilot/companion) (APSync) project [here](https://gitter.im/ArduPilot/companion).
 
 ## About
 This is an attempt to create a unified web front end for the [Ardupilot companion](https://github.com/ArduPilot/companion) (APSync) project.
