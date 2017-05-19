@@ -187,6 +187,6 @@ if __name__ == '__main__':
     
     optsargs = parser.parse_args()
     (opts,args) = optsargs
-    apsync = APSync.APSync(optsargs)
+    apsync = APSync(optsargs)
     apsync.main_loop()
     
