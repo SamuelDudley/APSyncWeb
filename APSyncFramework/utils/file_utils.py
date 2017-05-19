@@ -14,7 +14,7 @@ if  sys.platform == 'win32':
     WinAppRoot = WinAppRoot.replace('\\', '\\\\') # replace a single backslash with a double, trust me.  :-) 
 else:
     # this is used for non-windows platforms with posix filesystems ( ie 1/2/3/4 )
-    AppRoot =  dirname(realpath(__file__))   #eg '/root/WebConfigServer'
+    AppRoot =  dirname(realpath(__file__))+"/.."   #eg '/root/WebConfigServer'
 
 def read_config():
 
@@ -24,25 +24,11 @@ def read_config():
             filename = AppRoot+'/conf/WebConfigServer.json'
 
         #return json.loads(file_get_contents(filename))
-
-        config =  json.loads(file_get_contents(filename))
-
-         # these were a late addition to the config file, so we check for it, and add it if it's not there.
-        if not 'portalmsgms' in config: 
-            config['portalmsgms'] = 200   # milliseconds 
-        if not "devupconnect" in config:
-            config['devupconnect'] =  "True"
-        if not "baudrate" in config:
-            config['baudrate'] =  "115200"
-        if not "rtscts" in config:
-            config['rtscts'] =  "True"
-        if not "majorversion" in config:
-            config['majorversion'] =  "...insert release version number here......."
-        if sys.platform != 'win32':
-            config['minorversion'] =  time.strftime("%Y/%m/%d, %H:%M:%S", time.localtime(getmtime(AppRoot+'/lastminorupdate.txt')))
-        else:
-            config['minorversion'] = "not supported on windows"
-
+        config = None
+        try:  # we need both a file-on-disk, AND valid JSON inside 
+            config =  json.loads(file_get_contents(filename))
+        except:
+            print "ERROR: unable to read JSON from %s, maybe it doesn't exist or is invalis JSON" %filename
         return config
 
 

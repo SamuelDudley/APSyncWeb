@@ -12,6 +12,15 @@
           {% include "message.html" %}
         {% end %}
       </div>
+      <hr>
+   <div id="configuration">
+     <ul>
+       {% for config in configs %}
+         <li>{{ escape(config) }} -> {{ escape(configs[config]) }}</li>
+       {% end %}
+     </ul>
+   </div>
+   <hr>
       <div id="input">
         <form action="/a/message/new" method="post" id="messageform">
           <table>
