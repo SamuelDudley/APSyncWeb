@@ -3,7 +3,7 @@ import tornado.web
 import tornado.websocket
 import tornado.httpserver
 
-import time, os
+import time, os, os.path
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
@@ -67,9 +67,12 @@ class Application(tornado.web.Application):
 
 def start_app(module):
     application = Application(module)
+    # find config files, relative to where this .py file is kept:
+    confdir = os.path.dirname(os.path.realpath(__file__))
+    print confdir
     server = tornado.httpserver.HTTPServer(application, ssl_options = {
-                                                                       "certfile": os.path.join("certs/certificate.pem"),
-                                                                       "keyfile": os.path.join("certs/privatekey.pem")
+                                                                       "certfile": os.path.join(confdir,"certs/certificate.pem"),
+                                                                       "keyfile": os.path.join(confdir,"certs/privatekey.pem")
                                                                        }
                                            )
     server.listen(4443)
