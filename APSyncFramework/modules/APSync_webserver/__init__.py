@@ -2,11 +2,11 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import tornado.httpserver
-
 import time, os, os.path
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
+from APSyncFramework.utils.file_utils import read_config
 
 # TODO unload is to come over the in queue
 
@@ -32,7 +32,10 @@ class WebserverModule(APSync_module.APModule):
     
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
-        self.render("index.html", messages="")
+        configs = read_config() # we read the .json config file on every non-websocket http request
+        for config_option in configs:
+            print "config_option: %s" %str(config_option)         
+        self.render("index.html", messages="", configs=configs)
 
 class DefaultWebSocket(tornado.websocket.WebSocketHandler):
     def initialize(self, callback):
