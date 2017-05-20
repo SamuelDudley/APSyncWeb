@@ -2,7 +2,7 @@
 from multiprocessing import Process
 import multiprocessing
 import threading
-import os
+import time
 import signal, select
 import traceback
 from APSyncFramework.utils.common_utils import PeriodicEvent
@@ -17,6 +17,7 @@ class APModule(Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.start_time = time.time()
         self.last_ping = None
         self.needs_unloading = multiprocessing.Event()
         self.lock = threading.Lock()
@@ -30,7 +31,7 @@ class APModule(Process):
         setproctitle.setproctitle(self.name)
 
         if description is None:
-            self.description = "APSync " + name + " process"
+            self.description = "APSync {0} process".format(self.name)
         else:
             self.description = description
     

@@ -111,7 +111,6 @@ class APSync(object):
                     
             if timeout and pid_exists(pid):
                 print("Failed to kill process with PID: {0}".format(pid))
-                
             del self.modules[where]
             self.event.set()
             print("Unloaded module %s" % modname)
@@ -119,11 +118,31 @@ class APSync(object):
         print("Unable to find module %s" % modname)
         return False
     
+    def reload_module(self, modname):
+        pmodule = None
+        for (i,m) in self.modules:
+            if i.name == modname:
+                pmodule = m
+        if pmodule is None:
+            print("Module %s not loaded" % modname)
+            return
+        if self.unload_module(modname):
+            try:
+                reload(pmodule)
+            except ImportError:
+                self.clear_zipimport_cache()
+                reload(pmodule)
+            if self.load_module(modname, quiet=True, start_now=True):
+                print("Reloaded module %s" % modname)
+                return
+            
     def check_pings(self):
         for (i,m) in self.modules:
             last_ping = i.last_ping
             if last_ping:
-                pass
+                if time.time()-last_ping['time'] > 10:
+                    print('Ping timeout, attempting reload of module {0}'.format(i.name))
+                    self.reload_module(i.name)
     
     def main_loop(self):
         '''main processing loop'''
@@ -248,21 +267,7 @@ class APSync(object):
                 print("usage: module reload <name>")
                 return
             modname = args[1]
-            pmodule = None
-            for (i,m) in self.modules:
-                if i.name == modname:
-                    pmodule = m
-            if pmodule is None:
-                print("Module %s not loaded" % modname)
-                return
-            if self.unload_module(modname):
-                try:
-                    reload(pmodule)
-                except ImportError:
-                    self.clear_zipimport_cache()
-                    reload(pmodule)
-                if self.load_module(modname, quiet=True, start_now=True):
-                    print("Reloaded module %s" % modname)
+            self.reload_module(modname)
         elif args[0] == "unload":
             if len(args) < 2:
                 print("usage: module unload <name>")
