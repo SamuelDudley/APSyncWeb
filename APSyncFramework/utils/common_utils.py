@@ -1,43 +1,13 @@
-# http://chimera.labs.oreilly.com/books/1230000000393/ch12.html#_polling_multiple_thread_queues
-import queue
-import socket
-import os
-import sys, time
+import sys, time, os, errno
 from pymavlink import mavutil
 
-class PollableQueue(queue.Queue,object):
-    def __init__(self):
-        super(PollableQueue, self).__init__()
-        # Create a pair of connected sockets
-        if os.name == 'posix':
-            self._putsocket, self._getsocket = socket.socketpair()
-        else:
-            # Compatibility on non-POSIX systems
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.bind(('127.0.0.1', 0))
-            server.listen(1)
-            self._putsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._putsocket.connect(server.getsockname())
-            self._getsocket, _ = server.accept()
-            server.close()
-
-    def fileno(self):
-        return self._getsocket.fileno()
-
-    def put(self, item):
-        super(PollableQueue, self).put(item)
-        self._putsocket.send(b'x')
-
-    def get(self):
-        self._getsocket.recv(1)
-        return super(PollableQueue, self).get()
     
 class Connection(object):
     def __init__(self, connection):
         self.control_connection = mavutil.mavlink_connection(connection) # a MAVLink connection
         self.control_link = mavutil.mavlink.MAVLink(self.control_connection)
         self.control_link.srcSystem = 11
-        self.control_link.srcComponent = 220 #195
+        self.control_link.srcComponent = 220
         
     def set_component(self, val):
         self.control_link.srcComponent = val
@@ -88,37 +58,82 @@ class PeriodicEvent(object):
                 self.event()
             return True
         return False
-    
-# below here is a basic test suite for the PollableQueue 
-if __name__ == '__main__':
-    import select
-    import threading
-    import time
-    
-    def consumer(queues):
-        '''
-        Consumer that reads data on multiple queues simultaneously
-        '''
-        while True:
-            can_read, _, _ = select.select(queues,[],[])
-            for r in can_read:
-                item = r.get()
-                print('Got:', item)
-    
-    q1 = PollableQueue()
-    q2 = PollableQueue()
-    q3 = PollableQueue()
-    t = threading.Thread(target=consumer, args=([q1,q2,q3],))
-    t.daemon = True
-    t.start()
-    
-    # Feed data to the queues
-    while True:
-        q1.put(1)
-        q2.put(10)
-        q3.put('hello')
-        q2.put(15)
-        time.sleep(0.01)
-    
-    time.sleep(1)
 
+
+class TimeoutExpired(Exception):
+    pass
+
+
+def pid_exists(pid):
+    """Check whether pid exists in the current process table."""
+    if pid < 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError, e:
+        return e.errno == errno.EPERM
+    else:
+        return True
+
+def wait_pid(pid, timeout=None):
+    """Wait for process with pid 'pid' to terminate and return its
+    exit status code as an integer.
+
+    If pid is not a children of os.getpid() (current process) just
+    waits until the process disappears and return None.
+
+    If pid does not exist at all return None immediately.
+
+    Raise TimeoutExpired on timeout expired (if specified).
+    """
+    def check_timeout(delay):
+        if timeout is not None:
+            if time.time() >= stop_at:
+                raise TimeoutExpired
+        time.sleep(delay)
+        return min(delay * 2, 0.04)
+
+    if timeout is not None:
+        waitcall = lambda: os.waitpid(pid, os.WNOHANG)
+        stop_at = time.time() + timeout
+    else:
+        waitcall = lambda: os.waitpid(pid, 0)
+
+    delay = 0.0001
+    while 1:
+        try:
+            retpid, status = waitcall()
+        except OSError, err:
+            if err.errno == errno.EINTR:
+                delay = check_timeout(delay)
+                continue
+            elif err.errno == errno.ECHILD:
+                # This has two meanings:
+                # - pid is not a child of os.getpid() in which case
+                #   we keep polling until it's gone
+                # - pid never existed in the first place
+                # In both cases we'll eventually return None as we
+                # can't determine its exit status code.
+                while 1:
+                    if pid_exists(pid):
+                        delay = check_timeout(delay)
+                    else:
+                        return
+            else:
+                raise
+        else:
+            if retpid == 0:
+                # WNOHANG was used, pid is still running
+                delay = check_timeout(delay)
+                continue
+            # process exited due to a signal; return the integer of
+            # that signal
+            if os.WIFSIGNALED(status):
+                return os.WTERMSIG(status)
+            # process exited using exit(2) system call; return the
+            # integer exit(2) system call has been called with
+            elif os.WIFEXITED(status):
+                return os.WEXITSTATUS(status)
+            else:
+                # should never happen
+                raise RuntimeError("unknown process exit status")

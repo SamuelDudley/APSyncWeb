@@ -5,7 +5,8 @@ import threading
 import os
 import signal, select
 import traceback
-
+from APSyncFramework.utils.common_utils import PeriodicEvent
+from APSyncFramework.utils.json_utils import ping
 import setproctitle
 
 class APModule(Process):
@@ -16,27 +17,31 @@ class APModule(Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.last_ping = None
         self.needs_unloading = multiprocessing.Event()
         self.lock = threading.Lock()
         self.in_queue = in_queue
         self.out_queue = out_queue
         self.name = name
+        self.ping = PeriodicEvent(frequency = 1.0/3.0, event = self.send_ping)
         self.in_queue_thread = threading.Thread(target=self.in_queue_handling,
                                                 args = (self.lock,))
         self.in_queue_thread.daemon = True
-
-        
         setproctitle.setproctitle(self.name)
 
         if description is None:
-            self.description = "APSync" + name + " process"
+            self.description = "APSync " + name + " process"
         else:
             self.description = description
+    
+    def send_ping(self):
+        self.out_queue.put_nowait(ping(self.name, self.pid))
             
     def exit_gracefully(self, signum, frame):
         self.unload()
     
     def unload(self):
+        print self.name, 'called unload'
         self.needs_unloading.set()
         
     def run(self):
@@ -49,6 +54,7 @@ class APModule(Process):
                 print ("FATAL: module ({0}) exited while multiprocessing".format(self.name)) 
                 traceback.print_exc()
                 # TODO: logging here
+        print self.name, 'main finished'
     
     def main(self):
         pass
@@ -60,10 +66,19 @@ class APModule(Process):
                 while not self.in_queue.empty():
                 # drain the queue
                     data = self.in_queue.get_nowait()
-                    # do something useful with the data...
-                    self.process_in_queue_data(data)
+                    if isinstance(data, Unload):
+                        self.unload()
+                    else:
+                        # do something useful with the data...
+                        self.process_in_queue_data(data)
+            self.ping.trigger()
+        
+        print self.name, 'in queue finished'
 
-    
     def process_in_queue_data(self, data):
-#         print('{0} got {1}'.format(self.name, data))
         pass
+    
+class Unload():
+    def __init__(self, name):
+        self.ack = False
+        

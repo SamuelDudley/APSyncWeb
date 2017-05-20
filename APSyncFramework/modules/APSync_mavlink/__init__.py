@@ -5,6 +5,7 @@ from APSyncFramework.utils.json_utils import json_wrap_with_target
 
 import os, time, select
 os.environ['MAVLINK20'] = '1' # force MAVLink v2 for the moment
+import pymavlink
 from pymavlink import mavutil
 
 class MavlinkModule(APSync_module.APModule):
@@ -18,15 +19,29 @@ class MavlinkModule(APSync_module.APModule):
         if not self.connection:
             try:
                 self.connection = Connection(self.connection_str)
+                self.connection.set_system(11)
+                self.connection.set_component(220)
             except Exception as err:
                 print("Failed to connect to %s : %s" %(self.connection_str,err))
                 self.connection = None
                 time.sleep(0.1)
         if self.connection:
             self.process_mavlink_connection_in()
+
     
-    def process_in_queue_data(self, data):
-        print self.name, 'got', data
+    def process_in_queue_data(self, data):    
+        # check to see if the data is an encoded mavlink message
+        if getattr(data, '__module__', None) == mavutil.mavlink.__name__:
+            print("{0} module sending MAVLink message {1}".format(self.name, data))
+            # send the mavlink message
+            # TODO: do we need to re-encode the message to keep the sequence number intact?
+            self.connection.control_link.send(data)
+
+        # handle JSON data here e.g. configuration or unload command
+        else:
+            print("{0} module got the following data: {1}".format(self.name, data))
+            pass
+        
 
     def process_mavlink_connection_in(self):
         inputready,outputready,exceptready = select.select([self.connection.control_connection.port],[],[],0.1)
@@ -38,7 +53,9 @@ class MavlinkModule(APSync_module.APModule):
                 msg_type = msg.get_type()
                 if msg_type == "ATTITUDE":
                     self.out_queue.put_nowait(json_wrap_with_target(msg.to_dict(), target = 'webserver'))
-        
+                else:
+                    pass
+                
 def init(in_queue, out_queue):
     '''initialise module'''
     return MavlinkModule(in_queue, out_queue)

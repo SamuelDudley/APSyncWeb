@@ -8,20 +8,33 @@ from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
 from APSyncFramework.utils.file_utils import read_config
 
-# TODO unload is to come over the in queue
+from pymavlink import mavutil
 
 live_web_sockets = set()
 
 class WebserverModule(APSync_module.APModule):
     def __init__(self, in_queue, out_queue):
         super(WebserverModule, self).__init__(in_queue, out_queue, "webserver")
-        self.main_counter = 0   
-            
+        self.main_counter = 0  
+        self.port = 4443
+        self.mavlink = mavutil.mavlink.MAVLink('')
+        
     def process_in_queue_data(self, data):
         websocket_send_message(data)
            
     def send_out_queue_data(self, data):
-        self.out_queue.put_nowait(json_wrap_with_target(data, target = 'mavlink'))
+        self.out_queue.put_nowait(data)
+        
+        # the following is an example of 'sending' a mavlink msg from
+        # a module with no direct mavlink connection
+        msg = self.mavlink.heartbeat_encode(
+            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+            base_mode = mavutil.mavlink.MAV_MODE_FLAG_TEST_ENABLED,
+            custom_mode = 0,
+            system_status = 4)
+         
+        self.out_queue.put_nowait(json_wrap_with_target(msg, target = 'mavlink'))
         
     def main(self):
         if self.main_counter == 0:
@@ -30,6 +43,11 @@ class WebserverModule(APSync_module.APModule):
         else:
             time.sleep(0.1)
     
+    def unload(self):
+        # override the unload method
+        stop_tornado()
+        self.needs_unloading.set()
+        
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
         configs = read_config() # we read the .json config file on every non-websocket http request
@@ -49,8 +67,10 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
      
     def on_message(self, message):
         print("incoming message", message)
-        self.callback(message)
-         
+        # the target needs to be passed from the web interface
+        targeted_message = json_wrap_with_target(message, target = 'mavlink')
+        self.callback(targeted_message)
+
     def on_close(self):
         print("websocket closed")
         
@@ -74,13 +94,13 @@ def start_app(module):
     confdir = os.path.dirname(os.path.realpath(__file__))
     print confdir
     server = tornado.httpserver.HTTPServer(application, ssl_options = {
-                                                                       "certfile": os.path.join(confdir,"certs/certificate.pem"),
-                                                                       "keyfile": os.path.join(confdir,"certs/privatekey.pem")
+                                                                       "certfile": os.path.join(confdir,"certs","certificate.pem"),
+                                                                       "keyfile": os.path.join(confdir,"certs","privatekey.pem")
                                                                        }
                                            )
-    server.listen(4443)
+    server.listen(module.port)
 #     server = application.listen(8888)
-    print "Starting app"
+    print("Starting Tornado on port {0}".format(module.port))
     return server
 
 def close_all_websockets():

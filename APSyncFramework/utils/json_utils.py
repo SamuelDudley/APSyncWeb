@@ -15,11 +15,16 @@ def json_wrap_with_target(data, target = 'logging', priority = 1):
         wrapper['_target'] =   target
         wrapper['_priority'] =   priority
         wrapper['data'] =   data
-        cleaned = json.dumps(wrapper,indent=2,sort_keys=True)    
-        return cleaned
-    except: 
-        print "CRITICAL json_wrap_with_target FAILED: "+str(data)
-        return False
+#         cleaned = json.dumps(wrapper,indent=2,sort_keys=True)    
+        return wrapper
+    except TypeError:
+        # data is not JSON serializable
+#         print "CRITICAL json_wrap_with_target FAILED: "+str(data)
+        wrapper = {}
+        wrapper['_target'] =   target
+        wrapper['_priority'] =   priority
+        wrapper['data'] =   data
+        return wrapper
    
 
 # take arbitrary "wrapped" json ( or other text ), and unwrap it into the embedded JSON layer without the "label" (the label that was the target/destination) 
@@ -33,21 +38,27 @@ def json_unwrap_with_target(wrappeddata):
         else:
             priority = 1
         data = wrapper['data']
-        cleaned = json.dumps(data,indent=2,sort_keys=True)    
+        cleaned = json.dumps(data,indent=2,sort_keys=True)  
         return (target,cleaned,priority)
-    except: 
-        print "CRITICAL json_unwrap_with_target FAILED: "+str(wrappeddata)
-        return ( False, False)
-    
+    except TypeError:
+        # we are not unwrapping JSON
+#         print wrappeddata
+#         print "CRITICAL json_unwrap_with_target FAILED: "+str(wrappeddata)
+        target = wrappeddata['_target']
+        if '_priority' in wrappeddata:
+            priority = wrappeddata['_priority']
+        else:
+            priority = 1
+        data = wrappeddata['data']
+        return (target,data,priority)
 
-def queue_ping(q,name):
-            # ping central thread to tell them we are still here...
-            ping = {} 
-            ping['time']=int(time.time())
-            ping['pid'] = os.getpid()
-            ping['name'] = name   
-            ping['procname'] = multiprocessing.current_process().name
-            q.put(1,json_wrap_with_target(ping,'watchtasks'))
+def ping(name, pid):
+    # ping central thread to tell them we are still here...
+    ping = {} 
+    ping['time']=int(time.time())
+    ping['pid'] = pid
+    ping['name'] = name   
+    return json_wrap_with_target(ping,'watchtasks')
 
 # note:  (target,cleaned,priority) =  json_unwrap_with_target(json_wrap_with_target('{ "some": "data"}'))  should return: 'target' = logging, and  cleaned =  '{ "some": "data" }'
 
@@ -64,7 +75,7 @@ def log_to_file(file,data):
 
     # internal static counter just for this function to increment etc, and this is how we initialise it on the first use...
     if not hasattr(log_to_file, "counter"):
-         log_to_file.counter = 0  # it doesn't exist yet, so initialize it
+        log_to_file.counter = 0  # it doesn't exist yet, so initialize it
 
 
     if sys.platform == 'win32':
