@@ -21,7 +21,7 @@ def read_config():
         if sys.platform == 'win32':
             filename = WinAppRoot+'\\conf\\WebConfigServer.windows.json'
         else:
-            filename = AppRoot+'/conf/WebConfigServer.json'
+            filename = os.path.join(AppRoot,'conf','WebConfigServer.json')
 
         #return json.loads(file_get_contents(filename))
         config = None
@@ -112,10 +112,10 @@ def check_crontab_queue():
         else:
             dirname = AppRoot+'/cronqueue/'
         for f in os.listdir(dirname):
-          fname = join(dirname, f);
-          if isfile(fname) and (fname.find(".json") >= 0) and (fname.find(".done") == -1) :
-            print "found a JSON file to action:"+fname
-            return fname
+            fname = join(dirname, f);
+            if isfile(fname) and (fname.find(".json") >= 0) and (fname.find(".done") == -1) :
+                print "found a JSON file to action:"+fname
+                return fname
         return ""
 
 # overwrite masterwifi.json 

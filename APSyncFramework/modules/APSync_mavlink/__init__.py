@@ -11,16 +11,17 @@ from pymavlink import mavutil
 class MavlinkModule(APSync_module.APModule):
     def __init__(self, in_queue, out_queue):
         super(MavlinkModule, self).__init__(in_queue, out_queue, "mavlink")
-        mavutil.set_dialect("ardupilotmega")
-        self.connection_str = 'tcp:127.0.0.1:5763'
+        
+        mavutil.set_dialect(self.config['dialect'])
+        self.connection_str = self.config['connection']
         self.connection = None
-            
-    def main(self):        
+                    
+    def main(self):   
         if not self.connection:
             try:
                 self.connection = Connection(self.connection_str)
-                self.connection.set_system(11)
-                self.connection.set_component(220)
+                self.connection.set_system(int(self.config['system_id']))
+                self.connection.set_component(int(self.config['component_id']))
             except Exception as err:
                 print("Failed to connect to %s : %s" %(self.connection_str,err))
                 self.connection = None

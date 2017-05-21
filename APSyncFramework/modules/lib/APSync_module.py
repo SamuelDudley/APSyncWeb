@@ -1,25 +1,25 @@
 # A template for APSync process based modules
-from multiprocessing import Process
-import multiprocessing
+from multiprocessing import Process, Event
 import threading
 import time
 import signal, select
 import traceback
+import setproctitle
 from APSyncFramework.utils.common_utils import PeriodicEvent
 from APSyncFramework.utils.json_utils import ping
-import setproctitle
+from APSyncFramework.utils.file_utils import read_config
 
 class APModule(Process):
     '''The base class for all modules'''
-
     def __init__(self, in_queue, out_queue, name, description = None):
         super(APModule, self).__init__()
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.config = read_config()
         self.start_time = time.time()
         self.last_ping = None
-        self.needs_unloading = multiprocessing.Event()
+        self.needs_unloading = Event()
         self.lock = threading.Lock()
         self.in_queue = in_queue
         self.out_queue = out_queue

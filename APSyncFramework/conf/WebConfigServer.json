@@ -7,5 +7,12 @@
   "pwd1": "aabbccdd", 
   "src": "webpage", 
   "ssid2": "myworkwifi", 
-  "ssid1": "yourhomewifi"
+  "ssid1": "yourhomewifi",
+  
+  "system_id": "11",
+  "component_id": "200",
+  "connection": "tcp:127.0.0.1:5763",
+  "dialect": "ardupilotmega",
+  
+  "webserver_port": "4443"
 }
