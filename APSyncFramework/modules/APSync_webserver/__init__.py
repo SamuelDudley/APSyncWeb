@@ -6,7 +6,7 @@ import time, os
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
-from APSyncFramework.utils.file_utils import read_config
+from APSyncFramework.utils.file_utils import read_config, write_config
 
 from pymavlink import mavutil
 
@@ -52,7 +52,7 @@ class MainHandler(tornado.web.RequestHandler):
         configs = read_config() # we read the .json config file on every non-websocket http request
         for config_option in configs:
             print "config_option: %s" %str(config_option)         
-        self.render("index.html", messages="", configs=configs)
+        self.render("index.html", configs=configs)
 
 class DefaultWebSocket(tornado.websocket.WebSocketHandler):
     def initialize(self, callback):
@@ -67,6 +67,8 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
     def on_message(self, message):
         print("incoming message", message)
         # the target needs to be passed from the web interface
+        import json
+        write_config(json.loads(message))
         targeted_message = json_wrap_with_target(message, target = 'mavlink')
         self.callback(targeted_message)
 
@@ -83,7 +85,7 @@ class Application(tornado.web.Application):
             cookie_secret="__TODO:_GENERATE_YOUR_OWN_RANDOM_VALUE_HERE__",
             template_path=os.path.join(os.path.dirname(__file__), "templates"),
             static_path=os.path.join(os.path.dirname(__file__), "static"),
-            xsrf_cookies=True,
+            xsrf_cookies=False,
         )
         super(Application, self).__init__(handlers, **settings)
 

@@ -5,7 +5,6 @@ from APSyncFramework.utils.json_utils import json_wrap_with_target
 
 import os, time, select
 os.environ['MAVLINK20'] = '1' # force MAVLink v2 for the moment
-import pymavlink
 from pymavlink import mavutil
 
 class MavlinkModule(APSync_module.APModule):
