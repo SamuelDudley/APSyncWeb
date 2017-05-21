@@ -35,7 +35,8 @@ class MavlinkModule(APSync_module.APModule):
             print("{0} module sending MAVLink message {1}".format(self.name, data))
             # send the mavlink message
             # TODO: do we need to re-encode the message to keep the sequence number intact?
-            self.connection.control_link.send(data)
+            if self.connection:
+                self.connection.control_link.send(data)
 
         # handle JSON data here e.g. configuration or unload command
         else:

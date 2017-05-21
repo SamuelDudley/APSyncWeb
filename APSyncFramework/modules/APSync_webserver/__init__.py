@@ -2,7 +2,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import tornado.httpserver
-import time, os
+import time, os, json
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
@@ -67,7 +67,6 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
     def on_message(self, message):
         print("incoming message", message)
         # the target needs to be passed from the web interface
-        import json
         write_config(json.loads(message))
         targeted_message = json_wrap_with_target(message, target = 'mavlink')
         self.callback(targeted_message)
@@ -85,7 +84,7 @@ class Application(tornado.web.Application):
             cookie_secret="__TODO:_GENERATE_YOUR_OWN_RANDOM_VALUE_HERE__",
             template_path=os.path.join(os.path.dirname(__file__), "templates"),
             static_path=os.path.join(os.path.dirname(__file__), "static"),
-            xsrf_cookies=False,
+            xsrf_cookies=True,
         )
         super(Application, self).__init__(handlers, **settings)
 
