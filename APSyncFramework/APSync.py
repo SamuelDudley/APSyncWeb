@@ -9,10 +9,9 @@ from APSyncFramework.utils.json_utils import json_unwrap_with_target
 apsync_state = []
 
 class APSync(object):
-    def __init__(self, optsargs):
+    def __init__(self):
         self.modules = []
         self.should_exit = False
-        self.optsargs = optsargs
     
     @property
     def loaded_modules(self):
@@ -278,28 +277,6 @@ class APSync(object):
             print(usage)
     
 if __name__ == '__main__':
-    from optparse import OptionParser
-    
-    parser = OptionParser('APSync.py [options]')
-    
-    parser.add_option("--connection", dest="connection", type='str',
-                      help="Flight computer connection", default="tcp:127.0.0.1:5763")
-    
-    parser.add_option("--debug", dest="debug",
-                      help="Enable debug output", default=False, choices=[False,True])
-    
-    parser.add_option("--heartbeat", dest="heartbeat",
-                      help="Send heartbeats from flight computer", default=False, choices=[False,True])
-    
-    parser.add_option("--ap_sys_id", dest="autopilot_system_id",
-                      help="The system ID of the autopilot attached to the flight computer", default=1)
-    
-    parser.add_option("--dialect", dest="dialect", help="MAVLink dialect", default="ardupilotmega")
-    
-    parser.add_option("--cc_sys_id", dest="companion_system_id",
-                      help="The system ID of the companion computer", default=1)
-    
-    optsargs = parser.parse_args()
-    apsync = APSync(optsargs)
+    apsync = APSync()
     apsync.main_loop()
     
