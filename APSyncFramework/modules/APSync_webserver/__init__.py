@@ -2,7 +2,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import tornado.httpserver
-import time, os, os.path
+import time, os
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
@@ -15,8 +15,7 @@ live_web_sockets = set()
 class WebserverModule(APSync_module.APModule):
     def __init__(self, in_queue, out_queue):
         super(WebserverModule, self).__init__(in_queue, out_queue, "webserver")
-        self.main_counter = 0  
-        self.port = 4443
+        self.main_counter = 0
         self.mavlink = mavutil.mavlink.MAVLink('')
         
     def process_in_queue_data(self, data):
@@ -98,9 +97,10 @@ def start_app(module):
                                                                        "keyfile": os.path.join(confdir,"certs","privatekey.pem")
                                                                        }
                                            )
-    server.listen(module.port)
+    port = int(module.config["webserver_port"])
+    server.listen(port)
 #     server = application.listen(8888)
-    print("Starting Tornado on port {0}".format(module.port))
+    print("Starting Tornado on port {0}".format(port))
     return server
 
 def close_all_websockets():
