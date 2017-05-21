@@ -60,8 +60,7 @@ def write_config(json_data):
             dirname = WinAppRoot+'\\conf\\'
             filename = dirname+'WebConfigServer.windows.json'
         else:
-            dirname = AppRoot+'/conf/'
-            filename = dirname+'WebConfigServer.json'
+            filename = os.path.join(AppRoot,'conf','WebConfigServer_1.json')
 
         old = read_config() # for something to compage against before we change it.
 
