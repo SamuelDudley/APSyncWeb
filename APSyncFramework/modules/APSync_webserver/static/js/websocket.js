@@ -30,10 +30,19 @@ function open_websocket() {
 		socket = null;
         isopen = false;
 	}
-	socket.onmessage = function(e) {
-		if (typeof e.data == "string") {
-			console.log(e.data);
-			//response = JSON.parse(e.data);
+	socket.onmessage = function(event) {
+		if (typeof event.data == "string") {
+			    try {
+			    	response = JSON.parse(event.data);
+			    } catch (e) {
+			    	console.log(event.data)
+			        return false;
+			    }
+
+			console.log(response);
+			if (response.mavlink_data) {
+				update_data_stream(response.mavlink_data);
+			}
 		}
 	}
 	socket.onclose = function(e) {

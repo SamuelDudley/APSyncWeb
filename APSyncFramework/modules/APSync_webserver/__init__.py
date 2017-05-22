@@ -22,18 +22,32 @@ class WebserverModule(APSync_module.APModule):
         websocket_send_message(data)
            
     def send_out_queue_data(self, data):
-        self.out_queue.put_nowait(data)
+        # work out what the data is
+        if "mavlink_data" in data.keys():
+            if "mavpackettype" in data["mavlink_data"].keys():
+                msg_type = data["mavlink_data"]["mavpackettype"]
+            else:
+                # mavlink_data requires mavpackettype
+                return
+            
+            if msg_type == 'HEARTBEAT':
+                # the following is an example of 'sending' a mavlink msg from
+                # a module with no direct mavlink connection
+                msg = self.mavlink.heartbeat_encode(
+                mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+                base_mode = mavutil.mavlink.MAV_MODE_FLAG_TEST_ENABLED,
+                custom_mode = 0,
+                system_status = 4)
+             
+            self.out_queue.put_nowait(json_wrap_with_target(msg, target = 'mavlink'))
         
-        # the following is an example of 'sending' a mavlink msg from
-        # a module with no direct mavlink connection
-        msg = self.mavlink.heartbeat_encode(
-            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
-            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
-            base_mode = mavutil.mavlink.MAV_MODE_FLAG_TEST_ENABLED,
-            custom_mode = 0,
-            system_status = 4)
-         
-        self.out_queue.put_nowait(json_wrap_with_target(msg, target = 'mavlink'))
+        elif "config" in data.keys():
+            config = data["config"]
+            write_config(config)
+        
+        else:
+            pass
         
     def main(self):
         if self.main_counter == 0:
@@ -65,11 +79,9 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
         self.write_message('you have been connected!')
      
     def on_message(self, message):
-        print("incoming message", message)
-        # the target needs to be passed from the web interface
-        write_config(json.loads(message))
-        targeted_message = json_wrap_with_target(message, target = 'mavlink')
-        self.callback(targeted_message)
+        print("received websocket message: {0}".format(message))
+        message = json.loads(message)
+        self.callback(message)
 
     def on_close(self):
         print("websocket closed")

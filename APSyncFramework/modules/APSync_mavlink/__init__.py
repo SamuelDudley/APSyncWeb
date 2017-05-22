@@ -3,7 +3,7 @@ from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import Connection
 from APSyncFramework.utils.json_utils import json_wrap_with_target
 
-import os, time, select
+import os, time, select, json
 os.environ['MAVLINK20'] = '1' # force MAVLink v2 for the moment
 from pymavlink import mavutil
 
@@ -42,7 +42,15 @@ class MavlinkModule(APSync_module.APModule):
         else:
             print("{0} module got the following data: {1}".format(self.name, data))
             pass
-        
+    
+    def forward_data(self, data, target):
+        self.out_queue.put_nowait(json_wrap_with_target(json.dumps(data).encode('utf8'), target = target))
+    
+    def forward_mav_data(self, msg, target):
+        msg_dict = msg.to_dict()
+        msg_dict['timestamp'] = msg._timestamp
+        data = {'mavlink_data':msg_dict}
+        self.forward_data(data, target)
 
     def process_mavlink_connection_in(self):
         inputready,outputready,exceptready = select.select([self.connection.control_connection.port],[],[],0.1)
@@ -53,7 +61,11 @@ class MavlinkModule(APSync_module.APModule):
             if msg:
                 msg_type = msg.get_type()
                 if msg_type == "ATTITUDE":
-                    self.out_queue.put_nowait(json_wrap_with_target(msg.to_dict(), target = 'webserver'))
+                    self.forward_mav_data(msg, target = 'webserver')
+                elif msg_type == "HEARTBEAT":
+                    self.forward_mav_data(msg, target = 'webserver')
+                elif msg_type == "STATUSTEXT":
+                    self.forward_mav_data(msg, target = 'webserver')
                 else:
                     pass
                 
