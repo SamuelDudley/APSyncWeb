@@ -1,3 +1,6 @@
+# python calls to linux shell commands
+# unsure if network manager will be used long term...
+
 import subprocess, time
 
 def run(args, shell = False):
@@ -118,10 +121,20 @@ def get_wifi_status(password, interface):
             return False
         
 def restart_interface(password, interface = 'wlan0'):
-    args = "echo '{0}' | sudo -S ifdown {1} && sudo ifup {1}".format(password, interface)
+    args = "echo '{0}' | sudo -S ifdown {1}".format(password, interface)
     ret = run(args, shell = True)
     try:
         (returncode, output) = ret
+        print ret
+    except ValueError:
+        # bad command
+        return
+    
+    args = "echo '{0}' | sudo -S ifup {1}".format(password, interface)
+    ret = run(args, shell = True)
+    try:
+        (returncode, output) = ret
+        print ret
     except ValueError:
         # bad command
         return
@@ -170,7 +183,7 @@ def get_network_interfaces():
     if returncode == 0:
         return interfaces
     else:
-        return
+        return False
 
 def get_serial_ids():
     args = ['ls', '/dev/serial/by-id/*']
@@ -199,37 +212,20 @@ def reboot(password):
         # bad command
         return
     
-def nmcli_d():
-    
-    args = ['nmcli', 'd']
-    ret = run(args, shell = False)
-    try:
-        (returncode, output) = ret
-    except ValueError:
-        # bad command
+def nmcli_add_wifi_conn_client(ssid, wifi_key, interface = 'wlan0',  conn_name="WiFiClient"):
+    connections = nmcli_c()
+    if not (connections or isinstance(connections, dict)):
+        # nmcli not supported?
         return
-    
-    if returncode == 0:
-        output = output.strip().split('\n')
-        interfaces = {}
-        for ent in output:
-            if 'DEVICE' in ent:
-                col_names = ent.strip().lower().split()
-            else:
-                ent = ent.strip().split()
-                interfaces[ent[0]] = dict(zip(col_names[1:], ent[1:]))
-        
-        return interfaces
-    
-    else:
-        return False
-    
-def nmcli_add_wifi_conn(ssid, wifi_key, interface = 'wlan0',  conn_name="WiFiClient"):
     
     arg_list = []
     
-    args = "nmcli connection add con-name {0} type wifi ifname {1} ssid {2}".format(conn_name, interface, ssid)
-    arg_list.append(args.split(' '))
+    connection = connections.get(conn_name, None)
+    if connection:
+        print("INFO: a connection named '{0}' already exists, skipping creation".format(conn_name))
+    else:
+        args = "nmcli connection add con-name {0} type wifi ifname {1} ssid {2}".format(conn_name, interface, ssid)
+        arg_list.append(args.split(' '))
     args = "nmcli connection modify {0} connection.autoconnect no".format(conn_name)
     arg_list.append(args.split(' '))
     args = "nmcli connection modify {0} 802-11-wireless.mode infrastructure".format(conn_name)
@@ -261,8 +257,71 @@ def nmcli_add_wifi_conn(ssid, wifi_key, interface = 'wlan0',  conn_name="WiFiCli
     
     return True
 
-def nmcli_c():
+def nmcli_add_wifi_conn_ap(ssid='ardupilot', wifi_key='enRouteArduPilot', interface = 'wlan0',  conn_name='WiFiAP', band = 'bg'):
+    supported_bands = ['bg', 'a'] # TODO: obtain these values for the interface
+    # see https://unix.stackexchange.com/questions/184175/how-to-set-up-wifi-hotspot-with-802-11n-mode for 'n' mode support
+    if band not in supported_bands:
+        print("WARNING: band '{0}' is not supported, valid options are 'bg' or 'a'. Defaulting to 'bg'".format(band))
+        band = 'bg'
+    connections = nmcli_c()
+    if not (connections or isinstance(connections, dict)):
+        # nmcli not supported?
+        return
     
+    arg_list = []
+    
+    connection = connections.get(conn_name, None)
+    if connection:
+        print("INFO: a connection named '{0}' already exists, skipping creation".format(conn_name))
+    else:
+        args = "nmcli connection add con-name {0} type wifi ifname {1} ssid {2}".format(conn_name, interface, ssid)
+        arg_list.append(args.split(' '))
+        
+    args = "nmcli connection modify {0} connection.autoconnect no".format(conn_name)
+    arg_list.append(args.split(' '))
+    args = "nmcli connection modify {0} 802-11-wireless.mode ap 802-11-wireless.band {1} ipv4.method shared".format(conn_name, band)
+    arg_list.append(args.split(' '))
+    args = "nmcli connection modify {0} wifi-sec.key-mgmt wpa-psk".format(conn_name)
+    arg_list.append(args.split(' '))
+    args = "nmcli connection modify {0} wifi-sec.psk {1}".format(conn_name, wifi_key)
+    arg_list.append(args.split(' '))
+    args = "nmcli connection up {0}".format(conn_name)
+    arg_list.append(args.split(' '))
+    
+    for args in arg_list:
+        ret = run(args, shell = False)
+        try:
+            (returncode, output) = ret
+        except ValueError:
+            # bad command
+            return
+    
+        if returncode != 0:
+            # TODO: log this
+            print ret, arg_list
+            return False
+        
+        if output != '':
+            print output.strip()
+    
+    return True
+
+def nmcli_restart(password):
+    args = "echo '{0}' | sudo -S service network-manager restart".format(password)
+    ret = run(args, shell = True)
+    try:
+        (returncode, output) = ret
+    except ValueError:
+        # bad command
+        return
+    
+    if returncode == 0:
+        return True
+    else:
+        return False
+
+
+def nmcli_c():
     args = ['nmcli', 'c']
     ret = run(args, shell = False)
     try:
@@ -282,6 +341,38 @@ def nmcli_c():
                 connections[ent[0]] = dict(zip(col_names[1:], ent[1:]))
         
         return connections
+    else:
+        return False
+
+def nmcli_d():
+    args = ['nmcli', 'd']
+    ret = run(args, shell = False)
+    try:
+        (returncode, output) = ret
+    except ValueError:
+        # bad command
+        return
+    
+    if returncode == 0:
+        output = output.strip().split('\n')
+        interfaces = {}
+        for ent in output:
+            if 'DEVICE' in ent:
+                col_names = ent.strip().lower().split()
+            else:
+                ent = ent.strip().split()
+                interfaces[ent[0]] = dict(zip(col_names[1:], ent[1:]))
+        
+        return interfaces
     
     else:
         return False
+
+# need to check if the wifi device supports AP mode iw list (look for AP)
+# then use iw dev to match the phy# to a device
+
+# can't seem to go from AP mode back to client mode without requiring a restart of network manager
+# need to do the following:
+# nmcli_add_wifi_conn_ap()
+# nmcli_restart()
+# nmcli_add_wifi_conn_client()
