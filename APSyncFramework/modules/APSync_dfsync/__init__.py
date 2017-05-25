@@ -17,9 +17,9 @@ class DFSyncModule(APSync_module.APModule):
         self.cloudsync_port = 2221
         self.cloudsync_user = 'apsync'
         self.cloudsync_address = 'www.mavcesium.io'
-        self.cloudsync_remote_dir = '/home/apsync/mav/'
-        self.datalog_dir = '/home/uas/dataflash-mav/'
-        self.datalog_archive_dir = '/home/uas/dflogger/dataflash-archive/'
+        self.cloudsync_remote_dir = '~'
+        self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
+        self.datalog_archive_dir = os.path.join(os.path.expanduser('~'),'dflogger', 'dataflash-archive')
         self.vehicle_unique_id = uuid.uuid4()
         
         self.datalogs = {}
@@ -43,7 +43,7 @@ class DFSyncModule(APSync_module.APModule):
             if self.datalogs[key]['age'] > self.old_time:
                 self.files_to_sync[key] = self.datalogs[key]['modify']
         # we have a dict of file names and last modified times
-        self.files_to_sync = sorted(self.files_to_sync.items(), key=lambda x:x[1])
+        self.files_to_sync = sorted(self.files_to_sync.items(), key = lambda x:x[1])
         
         if (len(self.files_to_sync) == 0 or not self.okay_to_sync()):
             time.sleep(2)
@@ -74,7 +74,7 @@ class DFSyncModule(APSync_module.APModule):
             if self.rsync_time.search(next_line):
                 # we found a line containing a status update
                 current_status = next_line.strip().split()
-                current_status=current_status[:4]
+                current_status = current_status[:4]
                 current_status.append(str(time.time()))
                 current_status.append(file_to_send)
                 # send this to the webserver...
