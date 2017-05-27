@@ -19,6 +19,11 @@ class DFSyncModule(APSync_module.APModule):
         
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
         self.datalog_archive_dir = os.path.join(os.path.expanduser('~'),'dflogger', 'dataflash-archive')
+        # create us a ~/dflogger/ folder and ~/dflogger/dataflash-archive/  if it's not already there. 
+        if not os.path.exists(self.datalog_dir):
+            os.mkdir(self.datalog_dir)
+        if not os.path.exists(self.datalog_archive_dir):
+            os.mkdir(self.datalog_archive_dir)
         self.vehicle_unique_id = uuid.uuid4()
         self.old_time = 3 # seconds a file must remain unchanged before being considered okay to sync
         
@@ -60,7 +65,7 @@ class DFSyncModule(APSync_module.APModule):
         send_path = os.path.join(self.datalog_dir,file_to_send)
 
         archive_folder = 'dataflash-{0}-{1}'.format(self.vehicle_unique_id, datetime.utcnow().strftime('%Y%m%d%H%M%S'))
-        rsynccmd = """rsync -aHzv -h --progress -e "ssh -p {0}" "{1}" {2}@{3}:{4}""".format(self.cloudsync_port,
+        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -p {0}" "{1}" {2}@{3}:{4}""".format(self.cloudsync_port,
                                                                                                   send_path, self.cloudsync_user,
                                                                                                   self.cloudsync_address,
                                                                                                   self.cloudsync_remote_dir
