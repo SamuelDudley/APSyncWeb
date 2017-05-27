@@ -1,7 +1,7 @@
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import pid_exists, wait_pid
 from APSyncFramework.utils.json_utils import json_wrap_with_target
-from APSyncFramework.utils.file_utils import mkdir_p
+from APSyncFramework.utils.file_utils import mkdir_p, write_config
 
 import os, time, subprocess, uuid, shutil, signal, re
 from datetime import datetime
@@ -12,9 +12,24 @@ class DFSyncModule(APSync_module.APModule):
         self.have_path_to_cloud = False # assume no internet facing network on module load
         self.is_not_armed = None # arm state is unknown on module load
         self.syncing_enabled = True 
-        self.cloudsync_port = self.config['cloudsync_port']
-        self.cloudsync_user = self.config['cloudsync_user']
-        self.cloudsync_address = self.config['cloudsync_address']
+        # vars should exist even if try block fails: 
+        self.cloudsync_port = '1'
+        self.cloudsync_user = 'u'
+        self.cloudsync_address = '1.2.3.4'
+        self.cloudsync_ssh_identity_file = 'f'
+        try: 
+            self.cloudsync_port = self.config['cloudsync_port']
+            self.cloudsync_user = self.config['cloudsync_user']
+            self.cloudsync_address = self.config['cloudsync_address']
+            self.cloudsync_ssh_identity_file = self.config['cloudsync_ssh_identity_file']
+        except KeyError as e:
+            print "At least one of your cloudsync settings is wrong or missing, resetting to defaults, sorry, please reload the webpage if open."
+            self.config['cloudsync_ssh_identity_file'] = '~/.ssh/id_rsa'
+            self.config['cloudsync_address'] = 'www.mavcesium.io'
+            self.config['cloudsync_user'] =  'apsync'
+            self.config['cloudsync_port'] =  '2221'
+            write_config(self.config)
+            
         self.cloudsync_remote_dir = '~'
         
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
@@ -65,10 +80,11 @@ class DFSyncModule(APSync_module.APModule):
         send_path = os.path.join(self.datalog_dir,file_to_send)
 
         archive_folder = 'dataflash-{0}-{1}'.format(self.vehicle_unique_id, datetime.utcnow().strftime('%Y%m%d%H%M%S'))
-        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -p {0}" "{1}" {2}@{3}:{4}""".format(self.cloudsync_port,
+        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -i {5} -p {0}" "{1}" {2}@{3}:{4}""".format(self.cloudsync_port,
                                                                                                   send_path, self.cloudsync_user,
                                                                                                   self.cloudsync_address,
-                                                                                                  self.cloudsync_remote_dir
+                                                                                                  self.cloudsync_remote_dir,
+                                                                                                  self.cloudsync_ssh_identity_file
                                                                                                   )
 
         self.datalogs.pop(file_to_send)
