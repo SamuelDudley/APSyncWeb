@@ -20,9 +20,8 @@ class WebserverModule(APSync_module.APModule):
         self.mavlink = mavutil.mavlink.MAVLink('')
         
     def process_in_queue_data(self, data):
-        
-        (data)
-           
+         websocket_send_message(data) 
+            
     def send_out_queue_data(self, data):
         print "callback routed to send_out_queue_data for queue-up:"+str(data)
         # work out what the data is and either pass it to a specific module for mandling, or handle it here immediately. 
