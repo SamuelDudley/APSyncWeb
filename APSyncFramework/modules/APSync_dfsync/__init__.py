@@ -80,13 +80,13 @@ class DFSyncModule(APSync_module.APModule):
         send_path = os.path.join(self.datalog_dir,file_to_send)
 
         archive_folder = 'dataflash-{0}-{1}'.format(self.vehicle_unique_id, datetime.utcnow().strftime('%Y%m%d%H%M%S'))
-        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -i {5} -p {0}" "{1}" {2}@{3}:{4}""".format(self.cloudsync_port,
+        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -i {5} -p {0} {2}@{3}" "{1}" {4}""".format(self.cloudsync_port,
                                                                                                   send_path, self.cloudsync_user,
                                                                                                   self.cloudsync_address,
                                                                                                   self.cloudsync_remote_dir,
                                                                                                   self.cloudsync_ssh_identity_file
                                                                                                   )
-
+        #print rsynccmd
         self.datalogs.pop(file_to_send)
         status_update = {'percent_sent':'0%', 'current_time':time.time(), 'file':file_to_send, 'status':'starting'}
         self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
