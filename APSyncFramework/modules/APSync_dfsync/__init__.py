@@ -12,12 +12,13 @@ class DFSyncModule(APSync_module.APModule):
         super(DFSyncModule, self).__init__(in_queue, out_queue, "dfsync")
         self.have_path_to_cloud = True#False
         self.is_not_armed = True#None
-        self.syncing_enabled = True
         
-        self.cloudsync_port = 2221
-        self.cloudsync_user = 'apsync'
-        self.cloudsync_address = 'www.mavcesium.io'
+        self.syncing_enabled = True
+        self.cloudsync_port = self.config['cloudsync_port']
+        self.cloudsync_user = self.config['cloudsync_user']
+        self.cloudsync_address = self.config['cloudsync_address']
         self.cloudsync_remote_dir = '~'
+        
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
         self.datalog_archive_dir = os.path.join(os.path.expanduser('~'),'dflogger', 'dataflash-archive')
         self.vehicle_unique_id = uuid.uuid4()
@@ -65,7 +66,7 @@ class DFSyncModule(APSync_module.APModule):
                                      shell=True,
                                      stdin=None,
                                      stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT,
+                                     stderr=subprocess.PIPE,
                                      universal_newlines=True,
                                     )                  
 
@@ -79,8 +80,8 @@ class DFSyncModule(APSync_module.APModule):
                 current_status.append(file_to_send)
                 # send this to the webserver...
                 status_update = dict(zip(['data_sent', 'percent_sent', 'sending_rate', 'time_remaining', 'current_time', 'file'], current_status))
-                self.out_queue.put_nowait(json_wrap_with_target({'dfsync:sync_update' : status_update}, target = 'webserver'))
-                print {'dfsync:sync_update': status_update}
+                self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
+                print {'dfsync-sync_update': status_update}
             if not next_line:
                 break
         
@@ -95,7 +96,11 @@ class DFSyncModule(APSync_module.APModule):
                 shutil.move(send_path, os.path.join(target_path, file_to_send))
                 print('INFO: datalog rsync complete for {0}'.format(file_to_send))
             else:
-                print('WARNING: an error during datalog rsync for {0}, exit code: {1}'.format(file_to_send, exitcode))
+                error_lines = rsyncproc.stderr.readlines()
+                err_trace = ''
+                for line in error_lines:
+                    err_trace += line.decode("utf-8")
+                print('WARNING: an error during datalog rsync for {0}, exit code: {1}, error trace: \n{2}'.format(file_to_send, exitcode, err_trace))
         else:
             # the rsync process is required to exit
             print('INFO: attempting to stop rsync process')
