@@ -19,6 +19,11 @@ class DFSyncModule(APSync_module.APModule):
         
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
         self.datalog_archive_dir = os.path.join(os.path.expanduser('~'),'dflogger', 'dataflash-archive')
+        # create us a ~/dflogger/ folder and ~/dflogger/dataflash-archive/  if it's not already there. 
+        if not os.path.exists(self.datalog_dir):
+            os.mkdir(self.datalog_dir)
+        if not os.path.exists(self.datalog_archive_dir):
+            os.mkdir(self.datalog_archive_dir)
         self.vehicle_unique_id = uuid.uuid4()
         self.old_time = 3 # seconds a file must remain unchanged before being considered okay to sync
         
