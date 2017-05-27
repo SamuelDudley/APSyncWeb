@@ -2,6 +2,7 @@
 # unsure if network manager will be used long term...
 
 import subprocess, time
+import os
 
 def run(args, shell = False):
     try:
@@ -17,7 +18,29 @@ def run(args, shell = False):
 #         print e.cmd # the cmd that caused it
 #         print e.output # the error output (if any)  
         return (e.returncode, e.output)
+        
+def make_ssh_key():
 
+    folder = os.path.join(os.path.expanduser('~'), '.ssh')
+    args = ["ssh-keygen", "-t", "rsa", "-f", folder+"/id_apsync", "-N", '']
+    print str(args)
+    ret = run(args, shell = False)
+    try:
+        (returncode, output) = ret
+    except ValueError:
+        # bad command
+        return
+
+    print str(output)
+    for line in output.split('\n'):
+        if 'transmitted' in line.strip():
+            print line
+            # we could do something with this output if desired...
+            
+    if returncode == 0:   
+        return 
+    else:
+        return False
 
 def ping(ip, interface = "wlan0"):
     print("Pinging {0} on {1}".format(ip, interface))

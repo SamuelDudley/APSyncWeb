@@ -94,6 +94,7 @@ def file_put_contents(filename,data):
         f.close()
 
 
+
 def file_get_contents(filename):
         maxlen = 10000
         fp = open(filename,'rb')
