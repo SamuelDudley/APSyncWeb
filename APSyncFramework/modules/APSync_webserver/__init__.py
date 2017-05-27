@@ -6,7 +6,8 @@ import time, os, json
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
-from APSyncFramework.utils.file_utils import read_config, write_config
+from APSyncFramework.utils.file_utils import read_config, write_config,file_get_contents
+from APSyncFramework.utils.network_utils import make_ssh_key
 
 from pymavlink import mavutil
 
@@ -19,10 +20,13 @@ class WebserverModule(APSync_module.APModule):
         self.mavlink = mavutil.mavlink.MAVLink('')
         
     def process_in_queue_data(self, data):
-        websocket_send_message(data)
-           
+         websocket_send_message(data) 
+            
     def send_out_queue_data(self, data):
-        # work out what the data is
+        print "callback routed to send_out_queue_data for queue-up:"+str(data)
+        # work out what the data is and either pass it to a specific module for mandling, or handle it here immediately. 
+        
+        # this is passing the data off to the "mavlink" module to handle this, as we don't know how to do that.
         if "mavlink_data" in data.keys():
             if "mavpackettype" in data["mavlink_data"].keys():
                 msg_type = data["mavlink_data"]["mavpackettype"]
@@ -39,12 +43,23 @@ class WebserverModule(APSync_module.APModule):
                 base_mode = mavutil.mavlink.MAV_MODE_FLAG_TEST_ENABLED,
                 custom_mode = 0,
                 system_status = 4)
-             
             self.out_queue.put_nowait(json_wrap_with_target(msg, target = 'mavlink'))
-        
+            
+        # if its a block of config-file type data, we'll just write it to disk now.       
         elif "config" in data.keys():
             config = data["config"]
             write_config(config)
+            
+        # if it's something else calling itself json_data, then we will handle it here and pretend it came from somwhere else
+        elif "json_data" in data.keys(): # 
+            make_ssh_key()
+            folder = os.path.join(os.path.expanduser('~'), '.ssh')
+
+            cred = json.loads(file_get_contents(folder+"/id_apsync"))
+            j = '{"json_data":{"result":"'+cred+'","replyto":"getIdentityResponse"}}';
+            msg = json.loads(j)
+            # send it back out the websocket immediately, no need to wrap it, as it's not being routed beyond tornado and browser. 
+            websocket_send_message(msg)
         
         else:
             pass
@@ -79,7 +94,7 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
     def on_message(self, message):
         print("received websocket message: {0}".format(message))
         message = json.loads(message)
-        self.callback(message)
+        self.callback(message) # this sends it to the module.send_out_queue_data for further processing.
 
     def on_close(self):
         print("websocket closed")

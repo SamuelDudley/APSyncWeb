@@ -44,12 +44,21 @@
 		       	<button type="button" id="submit_btn" class="btn btn-secondary">Submit</button>
 		       	<button type="button" id="load_btn" class="btn btn-secondary">Load</button>
 	       	</div>
-	       	
+	       	<hr>
 	       	<br>
 	       	<!-- example of sending a MAVLink message from a button -->
 	       	<button type="button" id="mavlink_btn" class="btn btn-secondary">Send MAVLink</button>
 	       	<!-- example of updating text element from javascript (MAVLink data via websocket) -->
        		<p id="heartbeat_text">Awaiting heartbeat...</p> <!-- this text is updated from datastream.js -->
+	       	<hr>
+	       	
+	       	<!-- example of sending a JSON message from a button, and getting a reply back -->
+	       	
+	       	<button type="button" class="btn btn-secondary" id="create_identity_btn">Create Identity</button>
+	       	<br>&nbsp;
+	       	<div id="identity_string" style="border: 1px solid black; border-radius: 6px; padding: 0.01em 16px; ">Enter text here...</div>
+	       	<hr>
+	       	
        	</div>
   	</body>
   	<script src="{{ static_url("js/datastream.js") }}" type="text/javascript"></script>
@@ -71,5 +80,24 @@
 		console.log(msg)
   		send(JSON.stringify({"mavlink_data" : msg}))
   	};
+   	</script>
+   	
+   	<script type="text/javascript">
+  	document.getElementById("create_identity_btn").onclick = sendIdentityRequest;
+  	
+  	function sendIdentityRequest(){
+  		var msg = {};
+  		msg["command"] = "sendIdentityRequest"
+  		msg["replyto"] = 'getIdentityResponse'
+		console.log(msg)
+  		send(JSON.stringify({"json_data" : msg}))
+  	};
+  	<!--  when the server gets back to us, it'll call this function with the contents of the reply's "json_data" as the paramater -->
+  	function getIdentityResponse(json_data){
+  	 <!-- alert('getIdentityResponse called ok') -->
+  	 document.getElementById("identity_string").innerText = json_data.result
+  	 console.log(json_data)
+  	}
+    
    	</script>
 </html>
