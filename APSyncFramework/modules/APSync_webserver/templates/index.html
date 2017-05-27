@@ -95,7 +95,7 @@
   	<!--  when the server gets back to us, it'll call this function with the contents of the reply's "json_data" as the paramater -->
   	function getIdentityResponse(json_data){
   	 <!-- alert('getIdentityResponse called ok') -->
-  	 document.getElementById("identity_string").innerText = json_data.result
+  	 document.getElementById("identity_string").innerText = atob(json_data.result)
   	 console.log(json_data)
   	}
     

@@ -3,6 +3,7 @@ import tornado.web
 import tornado.websocket
 import tornado.httpserver
 import time, os, json
+import base64
 
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.json_utils import json_wrap_with_target
@@ -52,11 +53,13 @@ class WebserverModule(APSync_module.APModule):
             
         # if it's something else calling itself json_data, then we will handle it here and pretend it came from somwhere else
         elif "json_data" in data.keys(): # 
-            make_ssh_key()
             folder = os.path.join(os.path.expanduser('~'), '.ssh')
-
-            cred = json.loads(file_get_contents(folder+"/id_apsync"))
-            j = '{"json_data":{"result":"'+cred+'","replyto":"getIdentityResponse"}}';
+            # make it if we don't have it. 
+            if not os.path.isfile(folder+"/id_apsync"):
+                make_ssh_key()             
+            cred = file_get_contents(folder+"/id_apsync")
+            j = '{"json_data":{"result":"'+base64.b64encode(cred)+'","replyto":"getIdentityResponse"}}';
+            print j
             msg = json.loads(j)
             # send it back out the websocket immediately, no need to wrap it, as it's not being routed beyond tornado and browser. 
             websocket_send_message(msg)
