@@ -152,7 +152,7 @@ class APSync(object):
         signal.signal(signal.SIGTERM, self.signal_handler)
 #         self.load_module('mavlink', start_now=True)
         self.load_module('webserver', start_now=True)
-#        self.load_module('dfsync', start_now=True)
+        self.load_module('dfsync', start_now=True)
         
         # TODO: make the input thread optional (this can be replaced by the web UI)
         self.input_loop_queue = multiprocessing.Queue()
