@@ -19,10 +19,8 @@ def run(args, shell = False):
 #         print e.output # the error output (if any)  
         return (e.returncode, e.output)
         
-def make_ssh_key():
-
-    folder = os.path.join(os.path.expanduser('~'), '.ssh')
-    args = ["ssh-keygen", "-t", "rsa", "-f", folder+"/id_apsync", "-N", '']
+def make_ssh_key(key_path = os.path.join(os.path.expanduser('~'), '.ssh'), key_name = 'id_apsync'):
+    args = ["ssh-keygen", "-t", "rsa", "-f", os.path.join(key_path, key_name), "-N", ""]
     print str(args)
     ret = run(args, shell = False)
     try:

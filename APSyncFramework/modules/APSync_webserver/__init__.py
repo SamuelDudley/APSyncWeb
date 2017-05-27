@@ -21,7 +21,7 @@ class WebserverModule(APSync_module.APModule):
         self.mavlink = mavutil.mavlink.MAVLink('')
         
     def process_in_queue_data(self, data):
-         websocket_send_message(data) 
+        websocket_send_message(data) 
             
     def send_out_queue_data(self, data):
         print "callback routed to send_out_queue_data for queue-up:"+str(data)
@@ -54,10 +54,12 @@ class WebserverModule(APSync_module.APModule):
         # if it's something else calling itself json_data, then we will handle it here and pretend it came from somwhere else
         elif "json_data" in data.keys(): # 
             folder = os.path.join(os.path.expanduser('~'), '.ssh')
-            # make it if we don't have it. 
-            if not os.path.isfile(folder+"/id_apsync"):
-                make_ssh_key()             
-            cred = file_get_contents(folder+"/id_apsync")
+            # make it if we don't have it.
+            cred_name = 'id_apsync' # load this from config?
+            cred_path = os.path.join(folder, cred_name+'.pub') # only expose the public key?
+            if not os.path.isfile(cred_path):
+                make_ssh_key(folder, cred_name)
+            cred = file_get_contents(cred_path)
             j = '{"json_data":{"result":"'+base64.b64encode(cred)+'","replyto":"getIdentityResponse"}}';
             print j
             msg = json.loads(j)

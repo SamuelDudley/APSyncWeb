@@ -1,7 +1,7 @@
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import pid_exists, wait_pid
 from APSyncFramework.utils.json_utils import json_wrap_with_target
-from APSyncFramework.utils.file_utils import mkdir_p, write_config
+from APSyncFramework.utils.file_utils import mkdir_p, write_config, read_config
 
 import os, time, subprocess, uuid, shutil, signal, re
 from datetime import datetime
@@ -9,40 +9,22 @@ from datetime import datetime
 class DFSyncModule(APSync_module.APModule):
     def __init__(self, in_queue, out_queue):
         super(DFSyncModule, self).__init__(in_queue, out_queue, "dfsync")
+        self.load_config()
         self.have_path_to_cloud = False # assume no internet facing network on module load
         self.is_not_armed = None # arm state is unknown on module load
-        self.syncing_enabled = True 
-        # vars should exist even if try block fails: 
-        self.cloudsync_port = '1'
-        self.cloudsync_user = 'u'
-        self.cloudsync_address = '1.2.3.4'
-        self.cloudsync_ssh_identity_file = 'f'
-        try: 
-            self.cloudsync_port = self.config['cloudsync_port']
-            self.cloudsync_user = self.config['cloudsync_user']
-            self.cloudsync_address = self.config['cloudsync_address']
-            self.cloudsync_ssh_identity_file = self.config['cloudsync_ssh_identity_file']
-        except KeyError as e:
-            print "At least one of your cloudsync settings is wrong or missing, resetting to defaults, sorry, please reload the webpage if open."
-            self.config['cloudsync_ssh_identity_file'] = '~/.ssh/id_rsa'
-            self.config['cloudsync_address'] = 'www.mavcesium.io'
-            self.config['cloudsync_user'] =  'apsync'
-            self.config['cloudsync_port'] =  '2221'
-            write_config(self.config)
-            
+        self.syncing_enabled = True
+
         self.cloudsync_remote_dir = '~'
-        
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
         self.datalog_archive_dir = os.path.join(os.path.expanduser('~'),'dflogger', 'dataflash-archive')
         # create us a ~/dflogger/ folder and ~/dflogger/dataflash-archive/  if it's not already there. 
-        if not os.path.exists(self.datalog_dir):
-            os.mkdir(self.datalog_dir)
-        if not os.path.exists(self.datalog_archive_dir):
-            os.mkdir(self.datalog_archive_dir)
+        mkdir_p(self.datalog_dir)
+        mkdir_p(self.datalog_archive_dir)
         self.vehicle_unique_id = uuid.uuid4()
         self.old_time = 3 # seconds a file must remain unchanged before being considered okay to sync
         
         self.datalogs = {}
+        self.rsync_pid = None
         self.rsync_time = re.compile(r'[0-9]:([0-5][0-9]):([0-5][0-9])')
         
         ### TODO update these values from other modules via process_in_queue_data()
@@ -50,6 +32,23 @@ class DFSyncModule(APSync_module.APModule):
         self.is_not_armed = True
         self.syncing_enabled = True
         ###
+    
+    def load_config(self):
+        # TODO: there must be a better way...
+        self.config = read_config()
+        try: 
+            self.cloudsync_port = self.config['cloudsync_port']
+            self.cloudsync_user = self.config['cloudsync_user']
+            self.cloudsync_address = self.config['cloudsync_address']
+            self.cloudsync_ssh_identity_file = self.config['cloudsync_ssh_identity_file']
+        except KeyError as e:
+            print "At least one of your cloudsync settings is wrong or missing, resetting to defaults, sorry, please reload the webpage if open."
+            self.config['cloudsync_ssh_identity_file'] = '~/.ssh/id_apsync'
+            self.config['cloudsync_address'] = 'www.mavcesium.io'
+            self.config['cloudsync_user'] =  'apsync'
+            self.config['cloudsync_port'] =  '2221'
+            write_config(self.config)
+            self.load_config()
 
     def main(self):
         stat_file_info = self.stat_files_in_dir(self.datalog_dir)
@@ -65,7 +64,7 @@ class DFSyncModule(APSync_module.APModule):
         
         self.files_to_sync = {}
         for key in self.datalogs.keys():
-            print key
+            print self.datalogs
             if self.datalogs[key]['age'] > self.old_time:
                 self.files_to_sync[key] = self.datalogs[key]['modify']
         # we have a dict of file names and last modified times
@@ -98,7 +97,7 @@ class DFSyncModule(APSync_module.APModule):
                                      stderr=subprocess.PIPE,
                                      universal_newlines=True,
                                     )                  
-
+        self.rsync_pid = rsyncproc.pid
         while self.okay_to_sync():
             next_line = rsyncproc.stdout.readline().decode("utf-8")
             # TODO: log all of stdout to disk
@@ -138,32 +137,37 @@ class DFSyncModule(APSync_module.APModule):
                 self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
                 print('WARNING: an error during datalog rsync for {0}, exit code: {1}, error trace: \n{2}'.format(file_to_send, exitcode, err_trace))
         else:
+            self.request_rsync_exit()
+            
+    def request_rsync_exit(self):
+        if not self.rsync_pid:
+            return
+        
+        if pid_exists(self.rsync_pid):
             # the rsync process is required to exit
             print('INFO: attempting to stop rsync process')
-            pid = rsyncproc.pid
-            if pid_exists(pid):
-                os.kill(pid, signal.SIGTERM)
-                try:
-                    wait_pid(pid, timeout=0.1)
-                    timeout = False
-                except:
-                    timeout = True
-            
-            if timeout and pid_exists(pid):
-                os.kill(pid, signal.SIGKILL)
-                try:
-                    wait_pid(pid, timeout=0.1)
-                    timeout = False
-                except:
-                    timeout = True
-                    
-            if timeout and pid_exists(pid):
-                print("ERROR: failed to terminate and kill rsync process with pid: {0}".format(pid))
-                
-            else:
-                print('INFO: rsync process stopped successfully')
         
-    
+            os.kill(self.rsync_pid, signal.SIGTERM)
+            try:
+                wait_pid(self.rsync_pid, timeout=0.1)
+                timeout = False
+            except:
+                timeout = True
+        
+        if timeout and pid_exists(self.rsync_pid):
+            os.kill(self.rsync_pid, signal.SIGKILL)
+            try:
+                wait_pid(self.rsync_pid, timeout=0.1)
+                timeout = False
+            except:
+                timeout = True
+                
+        if timeout and pid_exists(self.rsync_pid):
+            print("ERROR: failed to terminate and kill rsync process with pid: {0}".format(self.rsync_pid))
+            
+        else:
+            print('INFO: rsync process stopped successfully')
+
     def stat_files_in_dir(self, datalog_dir):
         ret = {}
         datalogs = [f for f in os.listdir(datalog_dir) if os.path.isfile(os.path.join(datalog_dir, f))]
@@ -185,7 +189,11 @@ class DFSyncModule(APSync_module.APModule):
         # look at network and set have_path_to_cloud
         # look at webserver and set syncing_enabled
         pass
-     
+    
+        
+    def unload_callback(self):
+        self.request_rsync_exit()
+        
 def init(in_queue, out_queue):
     '''initialise module'''
     return DFSyncModule(in_queue, out_queue)

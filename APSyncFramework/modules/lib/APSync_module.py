@@ -43,7 +43,12 @@ class APModule(Process):
     
     def unload(self):
         print self.name, 'called unload'
+        self.unload_callback()
         self.needs_unloading.set()
+        
+    def unload_callback(self):
+        ''' overload to perform any module specific cleanup'''
+        pass
         
     def run(self):
         if self.in_queue_thread is not None:
