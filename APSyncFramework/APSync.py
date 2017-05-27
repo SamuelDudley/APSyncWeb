@@ -152,7 +152,7 @@ class APSync(object):
         signal.signal(signal.SIGTERM, self.signal_handler)
 #         self.load_module('mavlink', start_now=True)
         self.load_module('webserver', start_now=True)
-        self.load_module('dfsync', start_now=True)
+#        self.load_module('dfsync', start_now=True)
         
         # TODO: make the input thread optional (this can be replaced by the web UI)
         self.input_loop_queue = multiprocessing.Queue()
@@ -175,6 +175,8 @@ class APSync(object):
                 cmd = args[0]
                 if cmd == 'module':
                     self.cmd_module(args[1:])
+                if (cmd == 'help') or (cmd == '?'):
+                    print "try one of these:\n\nmodule reload webserver\nmodule reload mavlink\nmodule list\nor paste some json if you are game\n\n"
             for event in periodic_events:
                 event.trigger()
                 
