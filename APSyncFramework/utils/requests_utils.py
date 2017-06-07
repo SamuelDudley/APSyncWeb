@@ -52,7 +52,7 @@ if __name__ == '__main__':
     import subprocess, os
     
     debug = True
-    verified_with_server = True
+    verified_with_server = False # set to True once you have registed with your public key and email
     user_email_address = 'example@gmail.com' # verification email will be sent here
     ssh_cred_name = 'id_apsync' # will be made if it does not exist
     file_to_upload = '~/dflogger/APSync.log'# ~/example.txt
