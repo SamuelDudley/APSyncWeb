@@ -43,10 +43,10 @@ class DFSyncModule(APSync_module.APModule):
             self.cloudsync_ssh_identity_file = self.config['cloudsync_ssh_identity_file']
         except KeyError as e:
             print "At least one of your cloudsync settings is wrong or missing, resetting to defaults, sorry, please reload the webpage if open."
-            self.config['cloudsync_ssh_identity_file'] = '~/.ssh/id_apsync'
-            self.config['cloudsync_address'] = 'www.mavcesium.io'
+            self.config['cloudsync_ssh_identity_file'] = os.path.expanduser('~/.ssh/id_apsync')
+            self.config['cloudsync_address'] = 'apsync.cloud'
             self.config['cloudsync_user'] =  'apsync'
-            self.config['cloudsync_port'] =  '2221'
+            self.config['cloudsync_port'] =  '22'
             write_config(self.config)
             self.load_config()
 
@@ -79,13 +79,13 @@ class DFSyncModule(APSync_module.APModule):
         send_path = os.path.join(self.datalog_dir,file_to_send)
 
         archive_folder = 'dataflash-{0}-{1}'.format(self.vehicle_unique_id, datetime.utcnow().strftime('%Y%m%d%H%M%S'))
-        rsynccmd = """rsync -aHzv -h --progress -e "ssh -o StrictHostKeyChecking=no -i {5} -p {0} {2}@{3}" "{1}" {4}""".format(self.cloudsync_port,
-                                                                                                  send_path, self.cloudsync_user,
-                                                                                                  self.cloudsync_address,
-                                                                                                  self.cloudsync_remote_dir,
-                                                                                                  self.cloudsync_ssh_identity_file
-                                                                                                  )
-        #print rsynccmd
+        
+        rsynccmd = '''rsync -ahHzv --progress -e "ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -F /dev/null -i {0} -p {1}" "{2}" {3}@{4}:{5}'''.format(self.cloudsync_ssh_identity_file,
+                                                                                                                                                                self.cloudsync_port,
+                                                                                                                                                                send_path,
+                                                                                                                                                                self.cloudsync_user,
+                                                                                                                                                                self.cloudsync_address,
+                                                                                                                                                                self.cloudsync_remote_dir)
         self.datalogs.pop(file_to_send)
         status_update = {'percent_sent':'0%', 'current_time':time.time(), 'file':file_to_send, 'status':'starting'}
         self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
