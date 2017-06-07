@@ -20,6 +20,7 @@ def run(args, shell = False):
         return (e.returncode, e.output)
         
 def make_ssh_key(key_path = os.path.join(os.path.expanduser('~'), '.ssh'), key_name = 'id_apsync'):
+    
     args = ["ssh-keygen", "-t", "rsa", "-f", os.path.join(key_path, key_name), "-N", ""]
     print str(args)
     ret = run(args, shell = False)
@@ -37,6 +38,20 @@ def make_ssh_key(key_path = os.path.join(os.path.expanduser('~'), '.ssh'), key_n
             
     if returncode == 0:   
         return 
+    else:
+        return False
+
+def generate_key_fingerprint(key_path):
+    args = ['ssh-keygen', '-lf', key_path]
+    ret = run(args)
+    try:
+        (returncode, output) = ret
+    except ValueError:
+        # bad command
+        return
+         
+    if returncode == 0:   
+        return output.strip().split(' ')[1].strip()
     else:
         return False
 

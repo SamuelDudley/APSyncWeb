@@ -6,7 +6,7 @@ import signal, select
 import traceback
 import setproctitle
 from APSyncFramework.utils.common_utils import PeriodicEvent
-from APSyncFramework.utils.json_utils import ping
+from APSyncFramework.utils.json_utils import ping, json_wrap_with_target
 from APSyncFramework.utils.file_utils import read_config
 
 class APModule(Process):
@@ -84,6 +84,15 @@ class APModule(Process):
     def process_in_queue_data(self, data):
         pass
     
+    def log(self, message, level = 'INFO'):
+        
+#         CRITICAL
+#         ERROR
+#         WARNING
+#         INFO
+#         DEBUG
+#         NOTSET
+        self.out_queue.put_nowait(json_wrap_with_target({'msg':message, 'level':level}, target = 'logging'))
 class Unload():
     def __init__(self, name):
         self.ack = False

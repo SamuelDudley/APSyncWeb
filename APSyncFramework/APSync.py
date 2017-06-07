@@ -1,9 +1,12 @@
 import time, select, sys, signal, os, shlex
 import multiprocessing, threading, setproctitle
-import traceback
+import traceback, logging
+from logging.handlers import RotatingFileHandler
+
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import PeriodicEvent, pid_exists, wait_pid
 from APSyncFramework.utils.json_utils import json_unwrap_with_target
+from APSyncFramework.utils.file_utils import mkdir_p
 
 # global for signals only.
 apsync_state = []
@@ -12,7 +15,26 @@ class APSync(object):
     def __init__(self):
         self.modules = []
         self.should_exit = False
-    
+        self.begin_logging()
+        
+    def begin_logging(self): 
+        logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+        rootLogger = logging.getLogger()
+        rootLogger.setLevel(1)
+        log_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'logs')
+        mkdir_p(log_dir)
+        fileHandler = RotatingFileHandler("{0}/{1}.log".format(log_dir, 'APSync'), maxBytes = 100000, backupCount = 5)
+        fileHandler.setFormatter(logFormatter)
+        fileHandler.setLevel(1) # used to control what is printed to console
+        rootLogger.addHandler(fileHandler)
+        
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        consoleHandler.setLevel(1) # used to control what is printed to console
+        rootLogger.addHandler(consoleHandler)
+        
+        
+        
     @property
     def loaded_modules(self):
         return [module_instance.name for (module_instance,module) in self.modules]
@@ -230,6 +252,20 @@ class APSync(object):
                             where = (idx for idx,(i,m) in enumerate(self.modules) if i.name==data['name']).next()
                             (i,m) = self.modules[where]
                             i.last_ping = data
+                        elif target == 'logging':
+                            print data
+                            if data['level'].upper() == 'CRITICAL':
+                                logging.critical(data['msg'])
+                            elif data['level'].upper() == 'ERROR':
+                                logging.error(data['msg'])
+                            elif data['level'].upper() == 'WARNING':
+                                logging.warning(data['msg'])
+                            elif data['level'].upper() == 'INFO':
+                                logging.info(data['msg'])
+                            elif data['level'].upper() == 'DEBUG':
+                                logging.debug(data['msg'])
+                            else:
+                                pass
                         else:
                             idx = module_names.index(target)
                             in_queues[idx].put(data)

@@ -11,4 +11,3 @@ apsync_state = None
 if __name__ == '__main__':
     apsync_state = APSync.APSync()
     apsync_state.main_loop()
-
