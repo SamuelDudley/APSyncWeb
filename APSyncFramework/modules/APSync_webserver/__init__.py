@@ -116,7 +116,7 @@ class DefaultWebSocket(tornado.websocket.WebSocketHandler):
 class DFSyncHandler(tornado.web.RequestHandler):
     def get(self):
         configs = read_config() # we read the .json config file on every non-websocket http request
-        dfsync_configs = dict((k, v) for k, v in configs.iteritems() if k.split('_')[0] == 'cloudsync')
+        dfsync_configs = dict((k, v) for k, v in configs.iteritems() if (k.split('_')[0] == 'cloudsync' and isinstance(v, basestring)))
         print dfsync_configs
         self.render("dfsync.html", configs=dfsync_configs)
     

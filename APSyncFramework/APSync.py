@@ -32,9 +32,7 @@ class APSync(object):
         consoleHandler.setFormatter(logFormatter)
         consoleHandler.setLevel(1) # used to control what is printed to console
         rootLogger.addHandler(consoleHandler)
-        
-        
-        
+
     @property
     def loaded_modules(self):
         return [module_instance.name for (module_instance,module) in self.modules]
@@ -253,7 +251,6 @@ class APSync(object):
                             (i,m) = self.modules[where]
                             i.last_ping = data
                         elif target == 'logging':
-                            print data
                             if data['level'].upper() == 'CRITICAL':
                                 logging.critical(data['msg'])
                             elif data['level'].upper() == 'ERROR':

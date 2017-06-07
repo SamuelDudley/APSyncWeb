@@ -16,6 +16,7 @@ class APModule(Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.config_changed = False
         self.config = read_config()
         self.start_time = time.time()
         self.last_ping = None
@@ -93,6 +94,20 @@ class APModule(Process):
 #         DEBUG
 #         NOTSET
         self.out_queue.put_nowait(json_wrap_with_target({'msg':message, 'level':level}, target = 'logging'))
+    
+    def set_config(self, var_name, var_default):
+        new_val = self.config.get(var_name, var_default)
+        try:
+            cur_val = self.config[var_name]
+            if new_val != cur_val:
+                self.config_changed = True
+        except:
+            self.config_changed = True
+        
+        finally:
+            self.config[var_name] = new_val
+            return new_val
+        
 class Unload():
     def __init__(self, name):
         self.ack = False

@@ -2,6 +2,8 @@ from APSyncFramework.utils.network_utils import make_ssh_key, generate_key_finge
 from APSyncFramework.utils.file_utils import mkdir_p, file_get_contents
 import requests, sys, base64
 
+debug = True
+
 def create_session(URL, client):
     # Retrieve the CSRF token first
     if not client.cookies.get('_xsrf', False):
@@ -37,7 +39,7 @@ def register(URL, client, payload):
     if check_response(r):
         r_dict = r.json()
         print(r_dict)
-        return True
+        return r_dict
     return False
 
 def upload_request(URL, client, payload):
@@ -45,13 +47,12 @@ def upload_request(URL, client, payload):
     if check_response(r):
         r_dict = r.json()
         print(r_dict)
-        return True
+        return r_dict
     return False
 
 if __name__ == '__main__':
     import subprocess, os
     
-    debug = True
     verified_with_server = False # set to True once you have registed with your public key and email
     user_email_address = 'example@gmail.com' # verification email will be sent here
     ssh_cred_name = 'id_apsync' # will be made if it does not exist
