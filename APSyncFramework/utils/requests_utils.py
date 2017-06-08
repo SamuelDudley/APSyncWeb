@@ -2,7 +2,7 @@ from APSyncFramework.utils.network_utils import make_ssh_key, generate_key_finge
 from APSyncFramework.utils.file_utils import mkdir_p, file_get_contents
 import requests, sys, base64
 
-debug = True
+debug = True # TODO:replace with logging
 
 def create_session(URL, client):
     # Retrieve the CSRF token first
@@ -38,7 +38,13 @@ def register(URL, client, payload):
     r = client.post(URL, data=payload, verify=True)
     if check_response(r):
         r_dict = r.json()
-        print(r_dict)
+        return r_dict
+    return False
+
+def verify(URL, client, payload):
+    r = client.post(URL, data=payload, verify=True)
+    if check_response(r):
+        r_dict = r.json()
         return r_dict
     return False
 
@@ -46,7 +52,6 @@ def upload_request(URL, client, payload):
     r = client.post(URL, data=payload, verify=True)
     if check_response(r):
         r_dict = r.json()
-        print(r_dict)
         return r_dict
     return False
 

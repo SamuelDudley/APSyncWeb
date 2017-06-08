@@ -2,7 +2,7 @@ from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import pid_exists, wait_pid
 from APSyncFramework.utils.json_utils import json_wrap_with_target
 from APSyncFramework.utils.file_utils import mkdir_p, write_config, read_config, file_get_contents
-from APSyncFramework.utils.requests_utils import create_session, register, upload_request
+from APSyncFramework.utils.requests_utils import create_session, register, upload_request, verify
 from APSyncFramework.utils.network_utils import generate_key_fingerprint
 
 import os, time, subprocess, uuid, shutil, signal, re, base64
@@ -18,6 +18,8 @@ class DFSyncModule(APSync_module.APModule):
         self.is_not_armed = None # arm state is unknown on module load
         self.syncing_enabled = True
         self.cloudsync_session = False
+        self.last_verify_message = 0
+        self.verify_message_interval = 120
         
 
         self.cloudsync_remote_dir = '~'
@@ -43,6 +45,7 @@ class DFSyncModule(APSync_module.APModule):
         ###
         self.cloudsync_url_base = "https://"+self.cloudsync_address+"/"
         self.cloudsync_url_register = self.cloudsync_url_base+'register'
+        self.cloudsync_url_verify = self.cloudsync_url_base+'verify'
         self.cloudsync_url_upload = self.cloudsync_url_base+'upload'
     
     def load_config(self):
@@ -50,24 +53,44 @@ class DFSyncModule(APSync_module.APModule):
         self.cloudsync_port = self.set_config('cloudsync_port', 22)
         self.cloudsync_user = self.set_config('cloudsync_user', 'apsync')
         self.cloudsync_address = self.set_config('cloudsync_address', 'apsync.cloud')
-        self.cloudsync_account_registered = self.set_config('cloudsync_account_registered', 0)
-        self.cloudsync_account_verified = self.set_config('cloudsync_account_verified', 0)
+        self.cloudsync_account_registered = self.set_config('cloudsync_account_registered', False)
+        self.cloudsync_account_verified = self.set_config('cloudsync_account_verified', False)
         self.cloudsync_ssh_identity_file = self.set_config('cloudsync_ssh_identity_file', os.path.expanduser('~/.ssh/id_apsync'))
         self.cloudsync_vehicle_id = self.set_config('cloudsync_vehicle_id', '')
+        self.cloudsync_user_id = self.set_config('cloudsync_user_id', '')
         self.cloudsync_email = self.set_config('cloudsync_email', '')
         if self.config_changed:
             # TODO: send a msg to the webserver to update / reload the current page
             self.log("At least one of your cloudsync settings was missing or has been updated, please reload the webpage if open.", 'INFO')
-            write_config(self.config)
             self.config_changed = False
+        write_config(self.config)
     
     def main(self):
         if self.have_path_to_cloud:
             self.cloudsync_session = create_session(self.cloudsync_url_base, self.client)
             
             if (self.cloudsync_session and self.cloudsync_account_registered and not self.cloudsync_account_verified):
-                # TODO - challenge verification
-                pass
+                payload = {'public_key_fingerprint': base64.b64encode(self.ssh_cred_fingerprint), '_xsrf':self.client.cookies['_xsrf'] }
+                verify_response = verify(self.cloudsync_url_verify, self.client, payload)
+                if verify_response:
+                    if verify_response['verify']:
+                        self.config['cloudsync_vehicle_id'] = verify_response['vehicle_id']
+                        self.config['cloudsync_user_id'] = verify_response['user_id']
+                        self.config['cloudsync_account_verified'] = True
+                        self.load_config()
+                        
+                        j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
+                        self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                        self.log('Cloudsync account verified', 'INFO')
+                    else:
+                        self.config['cloudsync_account_verified'] = False
+                        self.load_config()
+                        if time.time() >= (self.last_verify_message + self.verify_message_interval):
+                            j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
+                            self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                            self.log('Cloudsync credentials need to be verified! Please verify them by clicking on the link sent to your email address', 'INFO')
+                            self.last_verify_message = time.time() + self.verify_message_interval
+                        
                 
         stat_file_info = self.stat_files_in_dir(self.datalog_dir)
         for key in stat_file_info.keys():
@@ -97,7 +120,7 @@ class DFSyncModule(APSync_module.APModule):
         self.log(upload_response, 'DEBUG')
         
         if not upload_response:
-            time.sleep(2)
+            time.sleep(3)
             return
         
         # sync the oldest file first
@@ -116,8 +139,8 @@ class DFSyncModule(APSync_module.APModule):
         
         
         self.datalogs.pop(file_to_send)
-        status_update = {'percent_sent':'0%', 'current_time':time.time(), 'file':file_to_send, 'status':'starting'}
-        self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
+        status_update = {'percent_sent':'0', 'current_time':time.time(), 'file':file_to_send, 'status':'starting', 'replyto':'dfsyncSyncUpdate'}
+        self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
         
         rsyncproc = subprocess.Popen(rsynccmd,
                                      shell=True,
@@ -134,13 +157,15 @@ class DFSyncModule(APSync_module.APModule):
                 # we found a line containing a status update
                 current_status = next_line.strip().split()
                 current_status = current_status[:4]
+                current_status[1] = current_status[1].strip('%')
                 current_status.append(str(time.time()))
                 current_status.append(file_to_send)
                 current_status.append('progress')
+                current_status.append('dfsyncSyncUpdate')
                 # send this to the webserver...
-                status_update = dict(zip(['data_sent', 'percent_sent', 'sending_rate', 'time_remaining', 'current_time', 'file', 'status'], current_status))
-                self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
-                print {'dfsync-sync_update': status_update}
+                status_update = dict(zip(['data_sent', 'percent_sent', 'sending_rate', 'time_remaining', 'current_time', 'file', 'status', 'replyto'], current_status))
+                self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
+                self.log({'dfsyncSyncUpdate': status_update}, 'DEBUG')
             if not next_line:
                 break
         
@@ -154,17 +179,19 @@ class DFSyncModule(APSync_module.APModule):
                 mkdir_p(target_path)
                 archive_file_path = os.path.join(target_path, file_to_send)
                 shutil.move(send_path, archive_file_path)
-                status_update = {'percent_sent':'100%', 'current_time':time.time(), 'file':file_to_send, 'status':'complete'}
-                self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
-                print('INFO: datalog rsync complete for {0}. Original datalog archived at {1}'.format(file_to_send, archive_file_path))
+                msg = '{0} - Datalog rsync complete. Original datalog archived at {1}\n'.format(file_to_send, archive_file_path)
+                status_update = {'percent_sent':'100', 'current_time':time.time(), 'file':file_to_send, 'message':msg, 'status':'complete', 'replyto':'dfsyncSyncUpdate'}
+                self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
+                self.log(msg, 'INFO')
             else:
                 error_lines = rsyncproc.stderr.readlines()
                 err_trace = ''
                 for line in error_lines:
                     err_trace += line.decode("utf-8")
-                status_update = {'error':err_trace, 'current_time':time.time(), 'file':file_to_send, 'status':'error'}
-                self.out_queue.put_nowait(json_wrap_with_target({'dfsync-sync_update' : status_update}, target = 'webserver'))
-                print('WARNING: an error during datalog rsync for {0}, exit code: {1}, error trace: \n{2}'.format(file_to_send, exitcode, err_trace))
+                msg = '{0} - An error during datalog rsync. Exit code: {1}. Error trace: \n{2}\n'.format(file_to_send, exitcode, err_trace)
+                status_update = {'error':err_trace, 'current_time':time.time(), 'file':file_to_send, 'status':'error', 'message':msg, 'replyto':'dfsyncSyncUpdate'}
+                self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : status_update}, target = 'webserver'))
+                self.log(msg,'WARNING')
         else:
             self.request_rsync_exit()
             
@@ -231,17 +258,22 @@ class DFSyncModule(APSync_module.APModule):
             if self.cloudsync_session:
                 
                 payload = {'email': self.cloudsync_email, 'public_key': base64.b64encode(self.ssh_cred), '_xsrf':self.client.cookies['_xsrf'] }
-                if register(self.cloudsync_url_register, self.client, payload):
+                ret = register(self.cloudsync_url_register, self.client, payload)
+                if ret:
                     # registration was OK
-                    self.config['cloudsync_account_registered'] = 1
+                    self.config['cloudsync_account_registered'] = True
                     self.load_config()
-                    # TODO: report registration attempt success 
-                    self.log('Cloudsync registration attempt successful', 'INFO')
+                    # TODO: report registration attempt success
+                    j = {'message': ret['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
+                    self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                    self.log('cloudsync registration attempt successful', 'INFO')
                     return
                 
-            self.config['cloudsync_account_registered'] = 0
+            self.config['cloudsync_account_registered'] = False
             self.load_config()
-            # TODO: report registration attempt fail
+            # TODO: report registration attempt fail and some useful details on how to fix it...
+            j = {'message':'Registration with cloudsync server failed', 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
+            self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
             self.log('Cloudsync registration attempt failed', 'INFO')
         # look at mavlink and set self.is_not_armed
         # look at network and set have_path_to_cloud

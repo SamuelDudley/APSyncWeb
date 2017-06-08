@@ -92,7 +92,8 @@ class WebserverModule(APSync_module.APModule):
         
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
-        configs = read_config() # we read the .json config file on every non-websocket http request         
+        configs = read_config() # we read the .json config file on every non-websocket http request      
+        configs = dict((k, v) for k, v in configs.iteritems() if (isinstance(v, basestring)))   
         self.render("index.html", configs=configs)
 
 class DefaultWebSocket(tornado.websocket.WebSocketHandler):
