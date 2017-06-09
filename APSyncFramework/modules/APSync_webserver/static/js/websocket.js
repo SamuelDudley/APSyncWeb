@@ -38,11 +38,15 @@ function open_websocket() {
 			    	console.log(event.data)
 			        return false;
 			    }
-
 			console.log(response);
 			if (response.mavlink_data) {
 				update_data_stream(response.mavlink_data);
 			}
+			if (response.json_data) {
+			    func = response.json_data.replyto
+			    args = response.json_data
+				window[func](args); // execute the name of the function that came from the json as 'replyto', pass it the json-as-javascript.
+			}			
 		}
 	}
 	socket.onclose = function(e) {

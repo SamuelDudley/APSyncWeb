@@ -1,9 +1,12 @@
 import time, select, sys, signal, os, shlex
 import multiprocessing, threading, setproctitle
-import traceback
+import traceback, logging
+from logging.handlers import RotatingFileHandler
+
 from APSyncFramework.modules.lib import APSync_module
 from APSyncFramework.utils.common_utils import PeriodicEvent, pid_exists, wait_pid
 from APSyncFramework.utils.json_utils import json_unwrap_with_target
+from APSyncFramework.utils.file_utils import mkdir_p
 
 # global for signals only.
 apsync_state = []
@@ -12,7 +15,24 @@ class APSync(object):
     def __init__(self):
         self.modules = []
         self.should_exit = False
-    
+        self.begin_logging()
+        
+    def begin_logging(self): 
+        logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
+        rootLogger = logging.getLogger()
+        rootLogger.setLevel(1)
+        log_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'logs')
+        mkdir_p(log_dir)
+        fileHandler = RotatingFileHandler("{0}/{1}.log".format(log_dir, 'APSync'), maxBytes = 100000, backupCount = 5)
+        fileHandler.setFormatter(logFormatter)
+        fileHandler.setLevel(1) # used to control what is printed to console
+        rootLogger.addHandler(fileHandler)
+        
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        consoleHandler.setLevel(1) # used to control what is printed to console
+        rootLogger.addHandler(consoleHandler)
+
     @property
     def loaded_modules(self):
         return [module_instance.name for (module_instance,module) in self.modules]
@@ -150,17 +170,19 @@ class APSync(object):
         pid = os.getpid()
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
-        self.load_module('mavlink', start_now=True)
+#         self.load_module('mavlink', start_now=True)
         self.load_module('webserver', start_now=True)
+        self.load_module('dfsync', start_now=True)
         
         # TODO: make the input thread optional (this can be replaced by the web UI)
         self.input_loop_queue = multiprocessing.Queue()
+        self.inject_data_queue = multiprocessing.Queue()
         
         input_loop_thread = threading.Thread(target=self.input_loop, args = (lock, apsync_state, self.input_loop_queue))
         input_loop_thread.daemon = True
         input_loop_thread.start()
         
-        queue_handling_thread = threading.Thread(target=self.queue_handling, args = (lock, self.event, apsync_state,))
+        queue_handling_thread = threading.Thread(target=self.queue_handling, args = (lock, self.event, apsync_state, self.inject_data_queue))
         queue_handling_thread.daemon = True
         queue_handling_thread.start()
         
@@ -174,6 +196,11 @@ class APSync(object):
                 cmd = args[0]
                 if cmd == 'module':
                     self.cmd_module(args[1:])
+                if (cmd == 'help') or (cmd == '?'):
+                    print "try one of these:\n\nmodule reload webserver\nmodule reload mavlink\nmodule list\nor paste some json if you are game\n\n"
+                if (line[0] == '{' and line[-1] == '}'):
+                    # assume the line is json
+                    self.inject_json(line)
             for event in periodic_events:
                 event.trigger()
                 
@@ -194,7 +221,7 @@ class APSync(object):
                 line = line.strip() # remove leading and trailing whitespace
                 out_queue.put_nowait(line)
     
-    def queue_handling(self, lock, event, apsync_state):
+    def queue_handling(self, lock, event, apsync_state, inject_data_queue):
         setproctitle.setproctitle("APSync")
 
         while not self.should_exit:
@@ -202,6 +229,7 @@ class APSync(object):
                 modules = self.modules
                 module_names = self.loaded_modules
                 out_queues = [i.out_queue for (i,m) in modules]
+                out_queues.append(inject_data_queue) # used to pass targeted data from the cmd line to modules
                 in_queues = [i.in_queue for (i,m) in modules]
                 queue_file_discriptors = [q._reader for q in out_queues]
                 event.clear()
@@ -222,6 +250,19 @@ class APSync(object):
                             where = (idx for idx,(i,m) in enumerate(self.modules) if i.name==data['name']).next()
                             (i,m) = self.modules[where]
                             i.last_ping = data
+                        elif target == 'logging':
+                            if data['level'].upper() == 'CRITICAL':
+                                logging.critical(data['msg'])
+                            elif data['level'].upper() == 'ERROR':
+                                logging.error(data['msg'])
+                            elif data['level'].upper() == 'WARNING':
+                                logging.warning(data['msg'])
+                            elif data['level'].upper() == 'INFO':
+                                logging.info(data['msg'])
+                            elif data['level'].upper() == 'DEBUG':
+                                logging.debug(data['msg'])
+                            else:
+                                pass
                         else:
                             idx = module_names.index(target)
                             in_queues[idx].put(data)
@@ -245,7 +286,18 @@ class APSync(object):
         lex.whitespace_split = True
         lex.commenters = ''
         return list(lex)
+    
+    def inject_json(self, json_data):
+        '''pass json data to the queue handler thread
+        e.g.: { "_target":"webserver", "data":{"json_data":{"command":"sendIdentityRequest","replyto":"getIdentityResponse"}} }'''
         
+        try:
+            (target,data,priority) = json_unwrap_with_target(json_data)
+            print('\nTARGET:\t\t{0}\nPRIORITY:\t{1}\nDATA:\n{2}'.format(target,priority,data))
+            self.inject_data_queue.put_nowait(json_data)
+        except Exception as e:
+            print('Something went wrong while trying to unwrap your json:\n{0}'.format(json_data))
+            
     def cmd_module(self, args):
         '''module commands'''
         usage = "usage: module <list|load|reload|unload>"

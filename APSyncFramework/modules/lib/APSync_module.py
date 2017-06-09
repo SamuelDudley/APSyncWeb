@@ -6,7 +6,7 @@ import signal, select
 import traceback
 import setproctitle
 from APSyncFramework.utils.common_utils import PeriodicEvent
-from APSyncFramework.utils.json_utils import ping
+from APSyncFramework.utils.json_utils import ping, json_wrap_with_target
 from APSyncFramework.utils.file_utils import read_config
 
 class APModule(Process):
@@ -16,6 +16,7 @@ class APModule(Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.config_changed = False
         self.config = read_config()
         self.start_time = time.time()
         self.last_ping = None
@@ -43,7 +44,12 @@ class APModule(Process):
     
     def unload(self):
         print self.name, 'called unload'
+        self.unload_callback()
         self.needs_unloading.set()
+        
+    def unload_callback(self):
+        ''' overload to perform any module specific cleanup'''
+        pass
         
     def run(self):
         if self.in_queue_thread is not None:
@@ -79,6 +85,29 @@ class APModule(Process):
     def process_in_queue_data(self, data):
         pass
     
+    def log(self, message, level = 'INFO'):
+        
+#         CRITICAL
+#         ERROR
+#         WARNING
+#         INFO
+#         DEBUG
+#         NOTSET
+        self.out_queue.put_nowait(json_wrap_with_target({'msg':message, 'level':level}, target = 'logging'))
+    
+    def set_config(self, var_name, var_default):
+        new_val = self.config.get(var_name, var_default)
+        try:
+            cur_val = self.config[var_name]
+            if new_val != cur_val:
+                self.config_changed = True
+        except:
+            self.config_changed = True
+        
+        finally:
+            self.config[var_name] = new_val
+            return new_val
+        
 class Unload():
     def __init__(self, name):
         self.ack = False

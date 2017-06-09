@@ -1,5 +1,6 @@
-import sys, time, os, errno
+import sys, time, os, errno, re
 from pymavlink import mavutil
+
 
     
 class Connection(object):
@@ -137,3 +138,9 @@ def wait_pid(pid, timeout=None):
             else:
                 # should never happen
                 raise RuntimeError("unknown process exit status")
+
+
+
+class MatchDict(dict):
+    def get_matching(self, event):
+        return dict((k, v) for k, v in self.iteritems() if k.split('_')[0] == event)

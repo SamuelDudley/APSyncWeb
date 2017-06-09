@@ -5,6 +5,7 @@ from os import listdir, rename
 from os.path import isfile, join, getmtime, dirname, realpath
 import re
 import time
+import errno
 
 # determine current directory, as it's the "root" of the Web
 if  sys.platform == 'win32':
@@ -60,7 +61,7 @@ def write_config(json_data):
             dirname = WinAppRoot+'\\conf\\'
             filename = dirname+'WebConfigServer.windows.json'
         else:
-            filename = os.path.join(AppRoot,'conf','WebConfigServer_1.json')
+            filename = os.path.join(AppRoot,'conf','WebConfigServer.json')
 
         old = read_config() # for something to compage against before we change it.
 
@@ -91,6 +92,7 @@ def file_put_contents(filename,data):
         os.fsync(f.fileno())
         # then close it
         f.close()
+
 
 
 def file_get_contents(filename):
@@ -266,3 +268,13 @@ def change_leds(r=None,g=None,b=None):
     if (r != R ) or ( g != G ) or ( b != B ) : 
         file_put_contents(folder+thefile,json.dumps(leds))
 
+
+# https://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:  # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise

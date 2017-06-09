@@ -14,5 +14,9 @@
   "connection": "tcp:127.0.0.1:5763",
   "dialect": "ardupilotmega",
   
-  "webserver_port": "4443"
+  "webserver_port": "4443",
+  
+  "cloudsync_user": "apsync",
+  "cloudsync_port": "2221",
+  "cloudsync_address": "www.mavcesium.io"
 }
