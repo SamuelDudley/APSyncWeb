@@ -18,6 +18,7 @@ class DFSyncModule(APSync_module.APModule):
         self.is_not_armed = None # arm state is unknown on module load
         self.syncing_enabled = True
         self.cloudsync_session = False
+        self.cloudsync_account_verified = False
         self.last_verify_message = 0
         self.verify_message_interval = 120
         
@@ -54,11 +55,10 @@ class DFSyncModule(APSync_module.APModule):
         self.cloudsync_user = self.set_config('cloudsync_user', 'apsync')
         self.cloudsync_address = self.set_config('cloudsync_address', 'apsync.cloud')
         self.cloudsync_account_registered = self.set_config('cloudsync_account_registered', False)
-        self.cloudsync_account_verified = self.set_config('cloudsync_account_verified', False)
         self.cloudsync_ssh_identity_file = self.set_config('cloudsync_ssh_identity_file', os.path.expanduser('~/.ssh/id_apsync'))
-        self.cloudsync_vehicle_id = self.set_config('cloudsync_vehicle_id', '')
-        self.cloudsync_user_id = self.set_config('cloudsync_user_id', '')
-        self.cloudsync_email = self.set_config('cloudsync_email', '')
+        self.cloudsync_vehicle_id = self.set_config('cloudsync_vehicle_id', 'None')
+        self.cloudsync_user_id = self.set_config('cloudsync_user_id', 'None')
+        self.cloudsync_email = self.set_config('cloudsync_email', 'example@gmail.com')
         if self.config_changed:
             # TODO: send a msg to the webserver to update / reload the current page
             self.log("At least one of your cloudsync settings was missing or has been updated, please reload the webpage if open.", 'INFO')
@@ -76,14 +76,14 @@ class DFSyncModule(APSync_module.APModule):
                     if verify_response['verify']:
                         self.config['cloudsync_vehicle_id'] = verify_response['vehicle_id']
                         self.config['cloudsync_user_id'] = verify_response['user_id']
-                        self.config['cloudsync_account_verified'] = True
+                        self.cloudsync_account_verified = True
                         self.load_config()
                         
                         j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
                         self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
                         self.log('Cloudsync account verified', 'INFO')
                     else:
-                        self.config['cloudsync_account_verified'] = False
+                        self.cloudsync_account_verified = False
                         self.load_config()
                         if time.time() >= (self.last_verify_message + self.verify_message_interval):
                             j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}

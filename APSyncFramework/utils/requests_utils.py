@@ -8,18 +8,21 @@ def create_session(URL, client):
     # Retrieve the CSRF token first
     if not client.cookies.get('_xsrf', False):
         # we dont have a xsrf cookie yet...
-        r = client.get(URL, verify=True) # sets cookie
-        if check_response(r):
-            if client.cookies.get('_xsrf', False):
-                # we now have a xsrf cookie
-                return True
+        try:
+            r = client.get(URL, verify=True) # sets cookie
+            if check_response(r):
+                if client.cookies.get('_xsrf', False):
+                    # we now have a xsrf cookie
+                    return True
+                else:
+                    # the response from the server was OK,
+                    # however we failed to get a xsrf cookie from the server
+                    return False
             else:
-                # the response from the server was OK,
-                # however we failed to get a xsrf cookie from the server
+                # the response from the server was bad
                 return False
-        else:
-            # the response from the server was bad
-            return False
+        except Exception as e:
+            print('An exception has occured accessing {0}.\n{1}'.format(URL, e))
     else:
         # we have an existing xsrf cookie for this session
         return True
