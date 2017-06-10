@@ -7,7 +7,7 @@ import traceback
 import setproctitle
 from APSyncFramework.utils.common_utils import PeriodicEvent
 from APSyncFramework.utils.json_utils import ping, json_wrap_with_target
-from APSyncFramework.utils.file_utils import read_config
+from APSyncFramework.utils.file_utils import read_config, write_config
 
 class APModule(Process):
     '''The base class for all modules'''
@@ -16,6 +16,7 @@ class APModule(Process):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.daemon = True
+        self.config_list= [] # overwrite this list
         self.config_changed = False
         self.config = read_config()
         self.start_time = time.time()
@@ -35,6 +36,24 @@ class APModule(Process):
             self.description = "APSync {0} process".format(self.name)
         else:
             self.description = description
+    
+    def update_config(self, config_list = []):
+        if len(config_list):
+            self.config_list = config_list
+        for (var_name, var_default) in self.config_list:
+            self.set_config(var_name, var_default)
+            
+        if self.config_changed:
+            # TODO: send a msg to the webserver to update / reload the current page
+            self.log('At least one of your cloudsync settings was missing or has been updated, please reload the webpage if open.', 'INFO')
+            self.config_changed = False
+            
+        config_on_disk = read_config()
+        for k in config_on_disk.keys():
+            if not k in self.config:
+                self.config[k] = config_on_disk[k]
+        
+        write_config(self.config)
     
     def send_ping(self):
         self.out_queue.put_nowait(ping(self.name, self.pid))

@@ -11,16 +11,25 @@ import requests
 
 class DFSyncModule(APSync_module.APModule):
     def __init__(self, in_queue, out_queue):
-        super(DFSyncModule, self).__init__(in_queue, out_queue, "dfsync")
-        self.load_config()
+        super(DFSyncModule, self).__init__(in_queue, out_queue, 'dfsync')
+        self.update_config([
+        ('cloudsync_syncing_enabled', True),
+        ('cloudsync_port', 22),
+        ('cloudsync_user', 'apsync'),
+        ('cloudsync_address', 'apsync.cloud'),
+        ('cloudsync_account_registered', False),
+        ('cloudsync_ssh_identity_file', os.path.expanduser('~/.ssh/id_apsync')),
+        ('cloudsync_vehicle_id', 'None'),
+        ('cloudsync_user_id', 'None'),
+        ('cloudsync_email', 'example@gmail.com')
+        ])
         self.get_ssh_creds() # need ssh keys in place
         self.have_path_to_cloud = False # assume no internet facing network on module load
         self.is_not_armed = None # arm state is unknown on module load
-        self.syncing_enabled = True
         self.cloudsync_session = False
+        self.cloudsync_account_verified = False
         self.last_verify_message = 0
         self.verify_message_interval = 120
-        
 
         self.cloudsync_remote_dir = '~'
         self.datalog_dir = os.path.join(os.path.expanduser('~'), 'dflogger')
@@ -37,57 +46,37 @@ class DFSyncModule(APSync_module.APModule):
         ### TODO update these values from other modules via process_in_queue_data()
         self.have_path_to_cloud = True
         self.is_not_armed = True
-        self.syncing_enabled = True
         ###
         
         self.client = requests.Session()
-        
-        ###
-        self.cloudsync_url_base = "https://"+self.cloudsync_address+"/"
+        self.cloudsync_url_base = 'https://{0}/'.format(self.config['cloudsync_address'])
         self.cloudsync_url_register = self.cloudsync_url_base+'register'
         self.cloudsync_url_verify = self.cloudsync_url_base+'verify'
         self.cloudsync_url_upload = self.cloudsync_url_base+'upload'
     
-    def load_config(self):
-        # TODO: move some of this into the module lib...
-        self.cloudsync_port = self.set_config('cloudsync_port', 22)
-        self.cloudsync_user = self.set_config('cloudsync_user', 'apsync')
-        self.cloudsync_address = self.set_config('cloudsync_address', 'apsync.cloud')
-        self.cloudsync_account_registered = self.set_config('cloudsync_account_registered', False)
-        self.cloudsync_account_verified = self.set_config('cloudsync_account_verified', False)
-        self.cloudsync_ssh_identity_file = self.set_config('cloudsync_ssh_identity_file', os.path.expanduser('~/.ssh/id_apsync'))
-        self.cloudsync_vehicle_id = self.set_config('cloudsync_vehicle_id', '')
-        self.cloudsync_user_id = self.set_config('cloudsync_user_id', '')
-        self.cloudsync_email = self.set_config('cloudsync_email', '')
-        if self.config_changed:
-            # TODO: send a msg to the webserver to update / reload the current page
-            self.log("At least one of your cloudsync settings was missing or has been updated, please reload the webpage if open.", 'INFO')
-            self.config_changed = False
-        write_config(self.config)
-    
     def main(self):
-        if self.have_path_to_cloud:
+        if self.have_path_to_cloud and self.config['cloudsync_syncing_enabled']:
             self.cloudsync_session = create_session(self.cloudsync_url_base, self.client)
             
-            if (self.cloudsync_session and self.cloudsync_account_registered and not self.cloudsync_account_verified):
-                payload = {'public_key_fingerprint': base64.b64encode(self.ssh_cred_fingerprint), '_xsrf':self.client.cookies['_xsrf'] }
+            if (self.cloudsync_session and self.config['cloudsync_account_registered'] and not self.cloudsync_account_verified):
+                payload = {'public_key_fingerprint': base64.b64encode(self.ssh_cred_fingerprint), '_xsrf':self.client.cookies['_xsrf']}
                 verify_response = verify(self.cloudsync_url_verify, self.client, payload)
                 if verify_response:
                     if verify_response['verify']:
                         self.config['cloudsync_vehicle_id'] = verify_response['vehicle_id']
                         self.config['cloudsync_user_id'] = verify_response['user_id']
-                        self.config['cloudsync_account_verified'] = True
-                        self.load_config()
+                        self.cloudsync_account_verified = True
+                        self.update_config()
                         
                         j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
-                        self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                        self.out_queue.put_nowait(json_wrap_with_target({'json_data':j}, target = 'webserver'))
                         self.log('Cloudsync account verified', 'INFO')
                     else:
-                        self.config['cloudsync_account_verified'] = False
-                        self.load_config()
+                        self.cloudsync_account_verified = False
+                        self.update_config()
                         if time.time() >= (self.last_verify_message + self.verify_message_interval):
                             j = {'message':verify_response['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
-                            self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                            self.out_queue.put_nowait(json_wrap_with_target({'json_data':j}, target = 'webserver'))
                             self.log('Cloudsync credentials need to be verified! Please verify them by clicking on the link sent to your email address', 'INFO')
                             self.last_verify_message = time.time() + self.verify_message_interval
                         
@@ -105,7 +94,6 @@ class DFSyncModule(APSync_module.APModule):
         
         self.files_to_sync = {}
         for key in self.datalogs.keys():
-#             print self.datalogs
             if self.datalogs[key]['age'] > self.old_time:
                 self.files_to_sync[key] = self.datalogs[key]['modify']
         # we have a dict of file names and last modified times
@@ -115,7 +103,7 @@ class DFSyncModule(APSync_module.APModule):
             time.sleep(2)
             return
         
-        payload = {'public_key_fingerprint': base64.b64encode(self.ssh_cred_fingerprint), '_xsrf':self.client.cookies['_xsrf'] }
+        payload = {'public_key_fingerprint':base64.b64encode(self.ssh_cred_fingerprint), '_xsrf':self.client.cookies['_xsrf']}
         upload_response = upload_request(self.cloudsync_url_upload, self.client, payload)
         self.log(upload_response, 'DEBUG')
         
@@ -130,17 +118,17 @@ class DFSyncModule(APSync_module.APModule):
         
         # upload_response
         archive_folder = upload_response['archive_folder']
-        rsynccmd = '''rsync -ahHzv --progress -e "ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -F /dev/null -i {0} -p {1}" "{2}" {3}@{4}:{5}'''.format(self.cloudsync_ssh_identity_file,
-                                                                                                                                                                self.cloudsync_port,
+        rsynccmd = 'rsync -ahHzv --progress -e "ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -F /dev/null -i {0} -p {1}" "{2}" {3}@{4}:{5}'.format(self.config['cloudsync_ssh_identity_file'],
+                                                                                                                                                                self.config['cloudsync_port'],
                                                                                                                                                                 send_path,
-                                                                                                                                                                self.cloudsync_user,
-                                                                                                                                                                self.cloudsync_address,
+                                                                                                                                                                self.config['cloudsync_user'],
+                                                                                                                                                                self.config['cloudsync_address'],
                                                                                                                                                                 self.cloudsync_remote_dir)
         
         
         self.datalogs.pop(file_to_send)
         status_update = {'percent_sent':'0', 'current_time':time.time(), 'file':file_to_send, 'status':'starting', 'replyto':'dfsyncSyncUpdate'}
-        self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
+        self.out_queue.put_nowait(json_wrap_with_target({'json_data':status_update}, target = 'webserver'))
         
         rsyncproc = subprocess.Popen(rsynccmd,
                                      shell=True,
@@ -151,7 +139,7 @@ class DFSyncModule(APSync_module.APModule):
                                     )                  
         self.rsync_pid = rsyncproc.pid
         while self.okay_to_sync():
-            next_line = rsyncproc.stdout.readline().decode("utf-8")
+            next_line = rsyncproc.stdout.readline().decode('utf-8')
             # TODO: log all of stdout to disk
             if self.rsync_time.search(next_line):
                 # we found a line containing a status update
@@ -164,7 +152,7 @@ class DFSyncModule(APSync_module.APModule):
                 current_status.append('dfsyncSyncUpdate')
                 # send this to the webserver...
                 status_update = dict(zip(['data_sent', 'percent_sent', 'sending_rate', 'time_remaining', 'current_time', 'file', 'status', 'replyto'], current_status))
-                self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
+                self.out_queue.put_nowait(json_wrap_with_target({'json_data':status_update}, target = 'webserver'))
                 self.log({'dfsyncSyncUpdate': status_update}, 'DEBUG')
             if not next_line:
                 break
@@ -181,16 +169,16 @@ class DFSyncModule(APSync_module.APModule):
                 shutil.move(send_path, archive_file_path)
                 msg = '{0} - Datalog rsync complete. Original datalog archived at {1}\n'.format(file_to_send, archive_file_path)
                 status_update = {'percent_sent':'100', 'current_time':time.time(), 'file':file_to_send, 'message':msg, 'status':'complete', 'replyto':'dfsyncSyncUpdate'}
-                self.out_queue.put_nowait(json_wrap_with_target({"json_data" : status_update}, target = 'webserver'))
+                self.out_queue.put_nowait(json_wrap_with_target({"json_data":status_update}, target = 'webserver'))
                 self.log(msg, 'INFO')
             else:
                 error_lines = rsyncproc.stderr.readlines()
                 err_trace = ''
                 for line in error_lines:
-                    err_trace += line.decode("utf-8")
+                    err_trace += line.decode('utf-8')
                 msg = '{0} - An error during datalog rsync. Exit code: {1}. Error trace: \n{2}\n'.format(file_to_send, exitcode, err_trace)
                 status_update = {'error':err_trace, 'current_time':time.time(), 'file':file_to_send, 'status':'error', 'message':msg, 'replyto':'dfsyncSyncUpdate'}
-                self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : status_update}, target = 'webserver'))
+                self.out_queue.put_nowait(json_wrap_with_target({"json_data":status_update}, target = 'webserver'))
                 self.log(msg,'WARNING')
         else:
             self.request_rsync_exit()
@@ -219,7 +207,7 @@ class DFSyncModule(APSync_module.APModule):
                 timeout = True
                 
         if timeout and pid_exists(self.rsync_pid):
-            print("ERROR: failed to terminate and kill rsync process with pid: {0}".format(self.rsync_pid))
+            print('ERROR: failed to terminate and kill rsync process with pid: {0}'.format(self.rsync_pid))
             
         else:
             print('INFO: rsync process stopped successfully')
@@ -234,22 +222,22 @@ class DFSyncModule(APSync_module.APModule):
         return ret
 
     def okay_to_sync(self):
-        if (self.is_not_armed and self.have_path_to_cloud and self.syncing_enabled and not self.needs_unloading.is_set() and self.cloudsync_session and self.cloudsync_account_registered and self.cloudsync_account_verified):
+        if (self.is_not_armed and self.have_path_to_cloud and self.config['cloudsync_syncing_enabled'] and not self.needs_unloading.is_set() and self.cloudsync_session and self.config['cloudsync_account_registered'] and self.cloudsync_account_verified):
             return True
         else:
             return False
         
     def get_ssh_creds(self):
-        ssh_cred_path = os.path.expanduser(self.cloudsync_ssh_identity_file+'.pub') # use the public key
+        ssh_cred_path = os.path.expanduser(self.config['cloudsync_ssh_identity_file']+'.pub') # use the public key
         self.ssh_cred = file_get_contents(ssh_cred_path).strip() # need the '.strip()'!
         self.ssh_cred_fingerprint = generate_key_fingerprint(ssh_cred_path)
     
     def process_in_queue_data(self, data):    
-        print("{0} module got the following data: {1}".format(self.name, data))
+        print('{0} module got the following data: {1}'.format(self.name, data))
         if 'dfsync_register' in data.keys():
             for key in data['dfsync_register'].keys():
                 self.config[key] = data['dfsync_register'][key]
-            self.load_config()
+            self.update_config()
             self.get_ssh_creds()
             # attempt registration with server
             if self.have_path_to_cloud:
@@ -257,24 +245,23 @@ class DFSyncModule(APSync_module.APModule):
                 
             if self.cloudsync_session:
                 
-                payload = {'email': self.cloudsync_email, 'public_key': base64.b64encode(self.ssh_cred), '_xsrf':self.client.cookies['_xsrf'] }
+                payload = {'email': self.config['cloudsync_email'], 'public_key': base64.b64encode(self.ssh_cred), '_xsrf':self.client.cookies['_xsrf']}
                 ret = register(self.cloudsync_url_register, self.client, payload)
                 if ret:
                     # registration was OK
                     self.config['cloudsync_account_registered'] = True
-                    self.load_config()
-                    # TODO: report registration attempt success
+                    self.update_config()
                     j = {'message': ret['msg'], 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
-                    self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
+                    self.out_queue.put_nowait(json_wrap_with_target({'json_data':j}, target = 'webserver'))
                     self.log('cloudsync registration attempt successful', 'INFO')
                     return
                 
             self.config['cloudsync_account_registered'] = False
-            self.load_config()
-            # TODO: report registration attempt fail and some useful details on how to fix it...
+            self.update_config()
+            # TODO: report some useful details on how to fix it...
             j = {'message':'Registration with cloudsync server failed', 'current_time':time.time(), 'replyto':'dfsyncSyncRegister'}
-            self.out_queue.put_nowait(json_wrap_with_target({"json_data"  : j}, target = 'webserver'))
-            self.log('Cloudsync registration attempt failed', 'INFO')
+            self.out_queue.put_nowait(json_wrap_with_target({'json_data':j}, target = 'webserver'))
+            self.log('cloudsync registration attempt failed', 'INFO')
         # look at mavlink and set self.is_not_armed
         # look at network and set have_path_to_cloud
         # look at webserver and set syncing_enabled
@@ -285,6 +272,6 @@ class DFSyncModule(APSync_module.APModule):
         self.request_rsync_exit()
         
 def init(in_queue, out_queue):
-    '''initialise module'''
+    """initialise module"""
     return DFSyncModule(in_queue, out_queue)
     

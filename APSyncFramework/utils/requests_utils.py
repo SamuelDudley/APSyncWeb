@@ -8,18 +8,21 @@ def create_session(URL, client):
     # Retrieve the CSRF token first
     if not client.cookies.get('_xsrf', False):
         # we dont have a xsrf cookie yet...
-        r = client.get(URL, verify=True) # sets cookie
-        if check_response(r):
-            if client.cookies.get('_xsrf', False):
-                # we now have a xsrf cookie
-                return True
+        try:
+            r = client.get(URL, verify=True) # sets cookie
+            if check_response(r):
+                if client.cookies.get('_xsrf', False):
+                    # we now have a xsrf cookie
+                    return True
+                else:
+                    # the response from the server was OK,
+                    # however we failed to get a xsrf cookie from the server
+                    return False
             else:
-                # the response from the server was OK,
-                # however we failed to get a xsrf cookie from the server
+                # the response from the server was bad
                 return False
-        else:
-            # the response from the server was bad
-            return False
+        except Exception as e:
+            print('An exception has occured accessing {0}.\n{1}'.format(URL, e))
     else:
         # we have an existing xsrf cookie for this session
         return True
@@ -73,10 +76,10 @@ if __name__ == '__main__':
     
     client = requests.Session()
     
-    URL0 = "https://apsync.cloud/"
-    URL1 = "https://apsync.cloud/register"
-    URL2 = "https://apsync.cloud/verify?hash="
-    URL3 = "https://apsync.cloud/upload"
+    URL0 = 'https://apsync.cloud/'
+    URL1 = 'https://apsync.cloud/register'
+    URL2 = 'https://apsync.cloud/verify?hash='
+    URL3 = 'https://apsync.cloud/upload'
     
     if not verified_with_server:
         # register
@@ -94,7 +97,7 @@ if __name__ == '__main__':
             payload = {'public_key_fingerprint': base64.b64encode(generate_key_fingerprint(ssh_cred_path)), '_xsrf':client.cookies['_xsrf'] }
             upload_request(URL3, client, payload)
     
-            rsynccmd = '''rsync -ahHzv --progress -e "ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -F /dev/null -i {0} -p 22" "{1}" apsync@apsync.cloud:~'''.format(os.path.join(ssh_cred_folder, ssh_cred_name), file_to_upload)
+            rsynccmd = 'rsync -ahHzv --progress -e "ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -F /dev/null -i {0} -p 22" "{1}" apsync@apsync.cloud:~'.format(os.path.join(ssh_cred_folder, ssh_cred_name), file_to_upload)
             rsyncproc = subprocess.Popen(
                                         rsynccmd,
                                         shell=True,
